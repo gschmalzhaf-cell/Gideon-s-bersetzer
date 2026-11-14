@@ -20,10 +20,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Repo auschecken
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Python 3.12 einrichten
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
           cache: pip
@@ -53,7 +53,7 @@ jobs:
         run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss'
 
       - name: Artefakt bereitstellen (Download unter dem Job)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: Tolino-Uebersetzer-Setup
           path: packaging/dist/Tolino-Uebersetzer-Setup.exe
