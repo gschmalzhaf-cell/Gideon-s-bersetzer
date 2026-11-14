@@ -36,18 +36,19 @@ class ApiTranslator:
     def translate_stream(
         self,
         messages: list[dict],
+        temperature: float | None = None,
         on_token: Callable[[str], None] | None = None,
         cancel_event=None,
     ) -> tuple[str, int]:
         """Übersetzt per Streaming und liefert (fertiger Text, gesendete Zeichen).
 
-        Die Zeichen Zählen ermöglichen eine nachvollziehbare Kostenschätzung.
+        Die Zeichenzahl ermöglicht eine nachvollziehbare Kostenschätzung.
         """
         chars_sent = sum(len(m.get("content", "")) for m in messages)
         payload = {
             "model": self.model,
             "messages": messages,
-            "temperature": self.temperature,
+            "temperature": self.temperature if temperature is None else temperature,
             "stream": True,
         }
         headers = {

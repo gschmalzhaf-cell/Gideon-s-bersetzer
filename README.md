@@ -61,7 +61,9 @@ python -m gideons_uebersetzer.app
 3. Inno Setup 6 mit `packaging/installer.iss` kompilieren → `Tolino-Uebersetzer-Setup.exe`
 
 Der Installer enthält **nicht** das Modell; die Anwendung lädt es beim ersten
-Start selbst. Siehe `packaging/README-de.txt`.
+Start selbst. Siehe `packaging/README-de.txt`. Die Abnahme-Checkliste für einen
+frischen Windows-11-Rechner (1-Klick-Beweis, Offline-Beweis, epubcheck, Calibre,
+Tolino, Privatsphäre, Fortsetzen) liegt in [docs/TEST-WINDOWS.md](docs/TEST-WINDOWS.md).
 
 ## Privatsphäre
 

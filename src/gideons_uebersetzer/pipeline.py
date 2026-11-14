@@ -109,19 +109,16 @@ class TranslationPipeline:
             if self._cancelled():
                 raise CancelledError("Übersetzung abgebrochen.")
             messages = build_messages(chunk.text, context, self.glossary, extra_hint=hint)
-            if hasattr(self.translator, "translate_stream") and getattr(self.translator, "_streams", True):
-                result = self.translator.translate_stream(
-                    messages,
-                    self.settings.temperature,
-                    on_token=self.listener.on_token,
-                    cancel_event=self.cancel_event,
-                )
-                if isinstance(result, tuple):
-                    translation, chars = result
-                else:
-                    translation, chars = result, 0
+            result = self.translator.translate_stream(
+                messages,
+                temperature=self.settings.temperature,
+                on_token=self.listener.on_token,
+                cancel_event=self.cancel_event,
+            )
+            if isinstance(result, tuple):
+                translation, chars = result
             else:
-                translation, chars = self.translator.translate(messages, cancel_event=self.cancel_event)
+                translation, chars = result, 0
             problem = quality_check(chunk.text, translation)
             if problem is None:
                 return translation, chars
