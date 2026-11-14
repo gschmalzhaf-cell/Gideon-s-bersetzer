@@ -69,6 +69,7 @@ def test_pipeline_full_run(tmp_path, sample_pdf):
     assert result.pages == book.page_count
     assert result.words == book.word_count
     assert result.duration_seconds >= 0
+    assert result.chars_sent > 0  # Zeichenzählung (API-Betrieb) läuft mit
     # Zwischenspeicher wurde nach erfolgreichem Lauf geleert
     assert not pipe.cache.cache_file.exists()
 

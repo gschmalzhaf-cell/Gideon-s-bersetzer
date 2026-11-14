@@ -120,8 +120,8 @@ def _build_translator(args, settings):
     tool = args.tool or settings.tool
     if tool == "api":
         if not settings.online_enabled and not args.online:
-            print("Hinweis: Der Online-Betrieb ist in den Einstellungen ausgeschaltet. "
-                  "Mit --online bestätigen Sie, dass der Buchtext an Mistral übertragen wird.")
+            print("Der Online-Betrieb ist ausgeschaltet. Der Buchtext würde an Mistral übertragen. "
+                  "Bitte in den Einstellungen bewusst einschalten oder hier mit --online bestätigen.")
             return None
         from .translator_api import ApiError, ApiTranslator
 
