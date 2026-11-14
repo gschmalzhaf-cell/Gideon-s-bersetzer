@@ -1,0 +1,15 @@
+# Laufzeit-Abhängigkeiten von Gideon's Übersetzer (Python 3.12)
+PySide6>=6.6          # GUI (Qt 6)
+PyMuPDF>=1.24         # PDF-Textextraktion
+ebooklib>=0.18        # EPUB-Ausgabe
+requests>=2.31        # Mistral-API (Notnagel) und Modell-Download
+huggingface_hub>=0.24 # Modell-Download von Hugging Face
+llama-cpp-python>=0.3 # Offline-Übersetzung (GGUF)
+
+# Hinweis Windows/CUDA: Für GPU-Beschleunigung unter Windows statt des
+# reinen CPU-Wheels das CUDA-Build von llama-cpp-python installieren
+# (z. B. von https://github.com/abetlen/llama-cpp-python/releases), damit
+# die CUDA-DLLs gebündelt werden können. Ohne CUDA läuft die App auf der CPU.
+
+# Entwicklung/Tests
+pytest>=8
