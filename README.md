@@ -71,6 +71,10 @@ Start selbst. Siehe `packaging/README-de.txt`. Die Abnahme-Checkliste für einen
 frischen Windows-11-Rechner (1-Klick-Beweis, Offline-Beweis, epubcheck, Calibre,
 Tolino, Privatsphäre, Fortsetzen) liegt in [docs/TEST-WINDOWS.md](docs/TEST-WINDOWS.md).
 
+## Roadmap (nach v1.0)
+
+ siehe [docs/ROADMAP.md](docs/ROADMAP.md) bzw. die Issues [#1](https://github.com/gschmalzhaf-cell/Gideon-s-bersetzer/issues/1) (EPUB/DOCX als Eingabe), [#2](https://github.com/gschmalzhaf-cell/Gideon-s-bersetzer/issues/2) (zweisprachiges EPUB), [#3](https://github.com/gschmalzhaf-cell/Gideon-s-bersetzer/issues/3) (OCR für gescannte PDFs).
+
 ## Privatsphäre
 
 Ohne eingeschalteten Online-Betrieb verlässt kein Buchinhalt das Gerät: die
