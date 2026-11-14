@@ -57,8 +57,14 @@ python -m gideons_uebersetzer.app
 ## Paketierung (Windows, M4)
 
 1. CUDA-Build von `llama-cpp-python` installieren (siehe requirements.txt).
-2. `pyinstaller packaging/gideons_uebersetzer.spec` → eine `Gideons-Uebersetzer.exe`
-3. Inno Setup 6 mit `packaging/installer.iss` kompilieren → `Tolino-Uebersetzer-Setup.exe`
+2. `pyinstaller packaging/gideons_uebersetzer.spec --distpath packaging/dist` → `packaging\dist\Gideons-Uebersetzer.exe`
+3. Inno Setup 6 mit `packaging/installer.iss` kompilieren → `packaging\dist\Tolino-Uebersetzer-Setup.exe`
+
+oder lokal alles auf einmal: `packaging\build-windows.bat`
+
+**Automatisch (CI):** `.github/workflows/build-windows.yml` baut bei jedem Push auf `main`
+(und bei Tags `v*`) auf einem `windows-latest`-Runner den Installer. Push auf `main` → Artefakt
+im Job + aktualisierter Draft-Release `latest-build`; Tag `v*.*` → veröffentlichter Release.
 
 Der Installer enthält **nicht** das Modell; die Anwendung lädt es beim ersten
 Start selbst. Siehe `packaging/README-de.txt`. Die Abnahme-Checkliste für einen

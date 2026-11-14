@@ -10,7 +10,8 @@ call .venv\Scripts\activate.bat
 python -m pip install --upgrade pip
 pip install -r requirements.txt pyinstaller
 
-pyinstaller packaging\gideons_uebersetzer.spec --clean --noconfirm
+REM distpath muss packaging\dist sein, damit installer.iss die EXE findet
+pyinstaller packaging\gideons_uebersetzer.spec --clean --noconfirm --distpath packaging\dist --workpath build\pyinstaller
 if errorlevel 1 goto :error
 
 REM Inno Setup: ISCC.exe liegt normalerweise unter "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
@@ -18,7 +19,7 @@ REM Inno Setup: ISCC.exe liegt normalerweise unter "C:\Program Files (x86)\Inno 
 if errorlevel 1 goto :error
 
 echo.
-echo Fertig: dist\Tolino-Uebersetzer-Setup.exe
+echo Fertig: packaging\dist\Tolino-Uebersetzer-Setup.exe
 goto :eof
 
 :error

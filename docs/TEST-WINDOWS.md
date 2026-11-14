@@ -10,12 +10,17 @@ python -m venv .venv
 .venv\Scripts\pip install -r requirements.txt pyinstaller
 :: Für CUDA: vorher das CUDA-Build von llama-cpp-python installieren
 :: (siehe requirements.txt) – sonst läuft die App auf der CPU.
-pyinstaller packaging\gideons_uebersetzer.spec --clean --noconfirm
+pyinstaller packaging\gideons_uebersetzer.spec --clean --noconfirm --distpath packaging\dist
 :: Inno Setup 6 öffnen und packaging\installer.iss kompilieren
-:: -> dist\Tolino-Uebersetzer-Setup.exe
+:: -> packaging\dist\Tolino-Uebersetzer-Setup.exe
 ```
 
-Kontrolle: `dist\Gideons-Uebersetzer.exe` startet ohne Python auf dem Testrechner
+Alternativ lokal alles auf einmal: `packaging\build-windows.bat`.
+Automatisch baut die GitHub-Action `.github/workflows/build-windows.yml` den Installer
+bei jedem Push auf `main` (Artefakt + Draft-Release `latest-build`) bzw. bei Tag `v*`
+als veröffentlichten Release.
+
+Kontrolle: `packaging\dist\Gideons-Uebersetzer.exe` startet ohne Python auf dem Testrechner
 (kein Konsolenfenster, Hauptfenster erscheint).
 
 ## 2. 1-Klick-Beweis (Abnahmekriterium 3)
