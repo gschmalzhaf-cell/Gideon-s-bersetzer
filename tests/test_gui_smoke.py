@@ -39,7 +39,7 @@ def test_main_window_builds(qapp, tmp_path, monkeypatch):
 def test_wizard_builds(qapp):
     settings = Settings()
     wiz = FirstStartWizard(settings)
-    assert wiz.pageCount() == 4
+    assert len(wiz.pageIds()) == 4
     assert wiz.mode_page.radio_offline.isChecked()  # Offline an erster Stelle vorausgewählt
     wiz.close()
 
