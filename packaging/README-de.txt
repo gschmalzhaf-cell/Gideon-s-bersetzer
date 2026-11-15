@@ -26,8 +26,10 @@ Ohne eingeschalteten Online-Betrieb verlässt kein Buchinhalt Ihr Gerät.
 
 PDF-Anforderungen
 ------------------
-Nur echte Text-PDFs. Eingescannte PDFs (nur Bilder) werden mit einer klaren
-Meldung abgelehnt – OCR ist in Version 1 nicht enthalten.
+Text-PDFs werden direkt gelesen. Eingescannte PDFs (Seiten nur als Bild) werden
+automatisch per OCR erkannt (lokal auf dem Gerät, Einstellung „OCR“ in den
+Einstellungen, Standard: an). Nur wenn OCR ausgeschaltet ist, wird eine klare
+Meldung angezeigt.
 
 Ergebnis
 --------

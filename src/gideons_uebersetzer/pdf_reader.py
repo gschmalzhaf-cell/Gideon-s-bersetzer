@@ -17,7 +17,7 @@ import pymupdf
 
 SCANNED_PDF_MESSAGE = (
     "Dieses PDF enthält keine Textebene, sondern nur Bilder. "
-    "OCR ist in Version 1 nicht enthalten."
+    "OCR ist ausgeschaltet – bitte in den Einstellungen „OCR für gescannte PDFs“ aktivieren."
 )
 
 _PAGE_NUMBER_RE = re.compile(r"^\s*(?:-?\s*\d{1,4}\s*-?|seite\s+\d{1,4})\s*$", re.IGNORECASE)
@@ -107,13 +107,38 @@ def _body_size(pages_dicts: list[dict]) -> float:
     return sizes.most_common(1)[0][0]
 
 
-def extract_book(path: str | Path) -> PdfBook:
+def _page_has_text(page_dict: dict) -> bool:
+    return any(
+        span.get("text", "").strip()
+        for block in page_dict.get("blocks", [])
+        for line in block.get("lines", [])
+        for span in line.get("spans", [])
+    )
+
+
+def _ocr_heading(text: str, prev_y: float | None, y: float, height: float) -> bool:
+    """Heuristik für Kapitelüberschriften in OCR-Text: kurze Zeile ohne Satzzeichen
+    (Fließtext-Zeilen werden durch den Zeilenumbruch oft abgeschnitten und sind
+    deutlich länger als echte Überschriften)."""
+    if len(text) > 60 or text[-1:] in ".!?,;:\"')“»":
+        return False
+    if prev_y is not None and y - prev_y > height * 2.0:
+        return True
+    return prev_y is None  # erste Zeile der Seite
+
+
+def extract_book(path: str | Path, ocr: bool = True, progress_cb=None) -> PdfBook:
     """Liest ein PDF ein und liefert ein PdfBook mit Kapiteln und Absätzen.
 
+    Seiten ohne Textebene (eingescannt) werden per OCR erkannt, sofern ocr=True.
+    progress_cb(page_nr, page_gesamt, modus) – modus ist "Text" oder "OCR".
+
     Raises:
-        ScannedPdfError: wenn eine Seite keinen extrahierbaren Text enthält.
+        ScannedPdfError: wenn OCR ausgeschaltet ist und eine Seite nur Bilder enthält.
         PdfError: bei sonstigen Leseproblemen.
     """
+    from . import ocr_reader
+
     path = Path(path)
     if not path.is_file():
         raise PdfError(f"Die Datei wurde nicht gefunden: {path}")
@@ -130,23 +155,58 @@ def extract_book(path: str | Path) -> PdfBook:
         author = (meta.get("author") or "").strip() or "Unbekannt"
 
         pages_dicts = [page.get_text("dict") for page in doc]
+        page_count = len(pages_dicts)
 
         for index, page_dict in enumerate(pages_dicts, start=1):
-            has_text = any(
-                span.get("text", "").strip()
-                for block in page_dict.get("blocks", [])
-                for line in block.get("lines", [])
-                for span in line.get("spans", [])
-            )
-            if not has_text:
+            if not _page_has_text(page_dict) and not ocr:
                 raise ScannedPdfError(index)
 
-        body_size = _body_size(pages_dicts)
+        body_size = _body_size([d for d in pages_dicts if _page_has_text(d)])
         chapters: list[Chapter] = []
         current = Chapter(title=None)
         chapters.append(current)
 
         for page_number, page_dict in enumerate(pages_dicts, start=1):
+            if not _page_has_text(page_dict):
+                if not ocr:
+                    raise ScannedPdfError(page_number)
+                if not ocr_reader.ocr_available():
+                    raise PdfError(
+                        f"Seite {page_number} enthält keine Textebene (nur Bilder), und das OCR-Modul "
+                        "ist nicht verfügbar. Bitte Anwendung neu installieren oder OCR ausschalten."
+                    )
+                if progress_cb is not None:
+                    progress_cb(page_number, page_count, "OCR")
+                ocr_lines = ocr_reader.ocr_page_lines(doc[page_number - 1])
+                prev_y: float | None = None
+                paragraph_parts: list[str] = []
+
+                def flush_ocr() -> None:
+                    nonlocal paragraph_parts, prev_y
+                    text = " ".join(paragraph_parts).strip()
+                    if text and not _PAGE_NUMBER_RE.match(text):
+                        current.paragraphs.append(Paragraph(text, page_number))
+                    paragraph_parts = []
+
+                for line in ocr_lines:
+                    if _PAGE_NUMBER_RE.match(line.text):
+                        continue
+                    gap = (line.y - prev_y) if prev_y is not None else None
+                    new_paragraph = prev_y is not None and gap is not None and gap > line.height * 1.6
+                    if new_paragraph:
+                        flush_ocr()
+                    if _ocr_heading(line.text, prev_y if not new_paragraph else None, line.y, line.height):
+                        flush_ocr()
+                        current = Chapter(title=line.text)
+                        chapters.append(current)
+                    else:
+                        paragraph_parts.append(line.text)
+                    prev_y = line.y
+                flush_ocr()
+                continue
+
+            if progress_cb is not None:
+                progress_cb(page_number, page_count, "Text")
             for block in page_dict.get("blocks", []):
                 if block.get("type", 0) != 0:
                     continue
@@ -182,7 +242,7 @@ def extract_book(path: str | Path) -> PdfBook:
             path=path,
             title=title,
             author=author,
-            page_count=len(pages_dicts),
+            page_count=page_count,
             chapters=chapters,
         )
 

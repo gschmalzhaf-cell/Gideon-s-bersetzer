@@ -19,10 +19,10 @@ def test_extract_book_detects_chapters(sample_pdf):
 
 def test_scanned_pdf_raises_clear_german_message(scanned_pdf):
     with pytest.raises(pdf_reader.ScannedPdfError) as excinfo:
-        pdf_reader.extract_book(scanned_pdf)
+        pdf_reader.extract_book(scanned_pdf, ocr=False)
     message = str(excinfo.value)
     assert "keine Textebene" in message
-    assert "OCR ist in Version 1 nicht enthalten" in message
+    assert "OCR ist ausgeschaltet" in message
     assert "Seite 1" in message
 
 

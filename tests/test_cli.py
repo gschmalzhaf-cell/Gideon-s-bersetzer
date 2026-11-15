@@ -37,8 +37,8 @@ def test_cli_uebersetzen_with_fake_translator(monkeypatch, tmp_path, sample_pdf,
 def test_cli_scanned_pdf_message(monkeypatch, tmp_path, scanned_pdf, capsys):
     monkeypatch.setattr(settings_mod, "default_settings_path", lambda: tmp_path / "settings.json")
     monkeypatch.setattr(settings_mod, "app_data_dir", lambda: tmp_path)
-    rc = cli.main(["uebersetzen", str(scanned_pdf), "--no-resume"])
+    rc = cli.main(["uebersetzen", str(scanned_pdf), "--no-resume", "--no-ocr"])
     assert rc == 1
     out = capsys.readouterr().out
     assert "keine Textebene" in out
-    assert "OCR ist in Version 1 nicht enthalten" in out
+    assert "OCR ist ausgeschaltet" in out

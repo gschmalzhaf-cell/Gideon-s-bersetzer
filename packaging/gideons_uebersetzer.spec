@@ -25,6 +25,7 @@ hiddenimports = [
     "gideons_uebersetzer.cli",
     "gideons_uebersetzer.pipeline",
     "gideons_uebersetzer.pdf_reader",
+    "gideons_uebersetzer.ocr_reader",
     "gideons_uebersetzer.epub_builder",
     "gideons_uebersetzer.translator_base",
     "gideons_uebersetzer.translator_local",
@@ -39,8 +40,9 @@ hiddenimports = [
     "llama_cpp",
 ]
 
-# Native Bibliotheken und Datendateien einsammeln (gguf-Bibliothek, CUDA-DLLs, pymupdf-DLLs)
-for pkg in ("llama_cpp", "pymupdf", "ebooklib", "huggingface_hub"):
+# Native Bibliotheken und Datendateien einsammeln (gguf-Bibliothek, CUDA-DLLs,
+# pymupdf-DLLs, OCR: ONNX-Runtime + OpenCV + RapidOCR-Modelle)
+for pkg in ("llama_cpp", "pymupdf", "ebooklib", "huggingface_hub", "rapidocr_onnxruntime", "onnxruntime", "cv2"):
     try:
         d, b, h = collect_all(pkg)
         datas += d

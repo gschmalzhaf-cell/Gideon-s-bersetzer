@@ -73,6 +73,7 @@ class Settings:
     hf_repo: str = DEFAULT_HF_REPO
     hf_filename: str = DEFAULT_HF_FILENAME
     output_dir: str = ""  # leer = Standard-Zielordner
+    ocr_enabled: bool = True  # gescannte PDF-Seiten per OCR erkennen
     first_start_done: bool = False
 
     def resolved_model_path(self) -> Path:

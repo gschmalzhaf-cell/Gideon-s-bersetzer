@@ -83,7 +83,13 @@ class _Worker(QThread):
 
     def run(self) -> None:
         try:
-            book = pdf_reader.extract_book(self.pdf_path)
+            def _extract_progress(page_nr: int, page_total: int, modus: str) -> None:
+                if modus == "OCR":
+                    self.log.emit(f"Seite {page_nr}/{page_total}: OCR (gescannte Seite) …")
+
+            book = pdf_reader.extract_book(
+                self.pdf_path, ocr=self.settings.ocr_enabled, progress_cb=_extract_progress
+            )
             self.log.emit(
                 f"PDF geladen: {book.title} – {book.page_count} Seiten, {book.word_count} Wörter, "
                 f"{len(book.chapters)} Kapitel erkannt."
@@ -225,6 +231,10 @@ class SettingsDialog(QDialog):
         self.spin_chunk.setValue(settings.chunk_size)
         form.addRow("Wörter pro Abschnitt:", self.spin_chunk)
 
+        self.chk_ocr = QCheckBox("Gescannte PDF-Seiten per OCR erkennen (langsamer, lokal)")
+        self.chk_ocr.setChecked(settings.ocr_enabled)
+        form.addRow("OCR:", self.chk_ocr)
+
         glossar_row = QHBoxLayout()
         self.txt_glossar = QLineEdit(settings.glossary_path)
         btn_glossar = QPushButton("…")
@@ -361,6 +371,7 @@ class SettingsDialog(QDialog):
         s.api_model = self.txt_api_model.text().strip() or "mistral-small-latest"
         s.temperature = self.spin_temp.value()
         s.chunk_size = self.spin_chunk.value()
+        s.ocr_enabled = self.chk_ocr.isChecked()
         s.glossary_path = self.txt_glossar.text().strip()
         s.output_dir = self.txt_output.text().strip()
         s.model_path = self.txt_model.text().strip()

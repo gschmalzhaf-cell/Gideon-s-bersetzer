@@ -78,8 +78,10 @@ Kontrolle: `packaging\dist\Gideons-Uebersetzer.exe` startet ohne Python auf dem 
 
 ## 9. Fehlerszenarien
 
-- Eingescanntes PDF (nur Bilder) → Meldung: „Dieses PDF enthält keine Textebene,
-  sondern nur Bilder. OCR ist in Version 1 nicht enthalten.“
+- Eingescanntes PDF (nur Bilder) → wird per OCR gelesen (Protokoll: „Seite x/y:
+  OCR …“); mit ausgeschaltetem OCR → Meldung: „… keine Textebene … OCR ist
+  ausgeschaltet …“. OCR-Pfad auch in der gebauten EXE testen (Scan-PDF komplett
+  übersetzen lassen).
 - Modell nicht geladen + Offline gewählt → klare Meldung mit Verweis auf „Modell laden“.
 - Abgebrochener Modell-Download → „.part“-Datei bleibt liegen, nächster Start
   setzt per Range-Request fort; fertige Datei wird auf Vollständigkeit geprüft.

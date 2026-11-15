@@ -48,6 +48,41 @@ def make_scanned_pdf(path: Path) -> Path:
     return path
 
 
+def make_scan_pdf_from(text_pdf: Path, out: Path, pages: int | None = None, zoom: float = 2.5) -> Path:
+    """Rendert Text-Seiten als Bild in ein neues PDF ohne Textebene (Scan-Simulation)."""
+    doc = pymupdf.open(text_pdf)
+    scan = pymupdf.open()
+    for i, page in enumerate(doc):
+        if pages is not None and i >= pages:
+            break
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom))
+        sp = scan.new_page(width=page.rect.width, height=page.rect.height)
+        sp.insert_image(sp.rect, pixmap=pix)
+    scan.save(out)
+    scan.close()
+    doc.close()
+    return out
+
+
+def make_mixed_pdf(text_pdf: Path, out: Path) -> Path:
+    """Seite 1 als Text, Seite 2+ als Scan."""
+    doc = pymupdf.open(text_pdf)
+    scan_page = doc[1]
+    pix = scan_page.get_pixmap(matrix=pymupdf.Matrix(2.5, 2.5))
+    img_pdf = pymupdf.open()
+    sp = img_pdf.new_page(width=scan_page.rect.width, height=scan_page.rect.height)
+    sp.insert_image(sp.rect, pixmap=pix)
+    img_bytes = img_pdf.tobytes()
+    doc.close()
+    mixed = pymupdf.open("pdf", img_bytes)
+    final = pymupdf.open(text_pdf)
+    final.delete_page(1)
+    final.insert_pdf(mixed)
+    final.save(out)
+    final.close()
+    return out
+
+
 @pytest.fixture()
 def sample_pdf(tmp_path):
     return make_text_pdf(tmp_path / "sample.pdf")
@@ -56,3 +91,8 @@ def sample_pdf(tmp_path):
 @pytest.fixture()
 def scanned_pdf(tmp_path):
     return make_scanned_pdf(tmp_path / "scanned.pdf")
+
+
+@pytest.fixture()
+def scan_pdf(tmp_path, sample_pdf):
+    return make_scan_pdf_from(sample_pdf, tmp_path / "scan.pdf")

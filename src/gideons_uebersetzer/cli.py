@@ -156,8 +156,16 @@ def _cmd_uebersetzen(args) -> int:
     if args.temperature is not None:
         settings.temperature = args.temperature
 
+    ocr = not args.no_ocr and settings.ocr_enabled
+    if not ocr:
+        print("Hinweis: OCR ist ausgeschaltet – reine Scan-PDFs werden abgelehnt.")
+
+    def _extract_progress(page_nr: int, page_total: int, modus: str) -> None:
+        if modus == "OCR":
+            print(f"  Seite {page_nr}/{page_total}: OCR (gescannte Seite) …", flush=True)
+
     try:
-        book = pdf_reader.extract_book(args.pdf)
+        book = pdf_reader.extract_book(args.pdf, ocr=ocr, progress_cb=_extract_progress)
     except pdf_reader.PdfError as exc:
         print(f"Fehler: {exc}")
         return 1
@@ -238,6 +246,7 @@ def main(argv: list[str] | None = None) -> int:
     p_tr.add_argument("--temperature", type=float, default=None, help="Temperatur (Standard: 0,3)")
     p_tr.add_argument("--no-resume", action="store_true", help="Keinen vorhandenen Zwischenspeicher verwenden")
     p_tr.add_argument("--no-cover", action="store_true", help="Kein Deckbild aus der ersten PDF-Seite übernehmen")
+    p_tr.add_argument("--no-ocr", action="store_true", help="OCR ausschalten – reine Scan-PDFs werden abgelehnt")
     p_tr.set_defaults(func=_cmd_uebersetzen)
 
     args = parser.parse_args(argv)
