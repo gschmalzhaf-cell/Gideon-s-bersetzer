@@ -8,7 +8,7 @@ def test_installer_dateiname_traegt_version():
     iss = (ROOT / "packaging" / "installer.iss").read_text(encoding="utf-8")
     assert "OutputBaseFilename=Tolino-Uebersetzer-Setup-{#MyAppVersion}" in iss
     assert "#ifndef MyAppVersion" in iss
-    assert "AppVersion={#MyAppVersion}" in iss
+    assert 'AppVersion="{#MyAppVersion}"' in iss
 
 
 def test_ci_uebergibt_version_an_iscc_und_verwendet_versionierten_dateinamen():
