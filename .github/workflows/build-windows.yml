@@ -45,6 +45,13 @@ jobs:
       - name: PyInstaller – eine EXE (packaging\dist\Gideons-Uebersetzer.exe)
         run: pyinstaller packaging/gideons_uebersetzer.spec --clean --noconfirm --distpath packaging/dist --workpath build/pyinstaller
 
+      - name: Smoke-Test – EXE startet ohne Importfehler (--version, Exitcode 0)
+        shell: pwsh
+        run: |
+          & packaging/dist/Gideons-Uebersetzer.exe --version
+          if ($LASTEXITCODE -ne 0) { Write-Error "EXE startet nicht sauber (Exitcode $LASTEXITCODE) – wahrscheinlich Importfehler im Bundle"; exit 1 }
+          Write-Host "Smoke-Test ok: EXE startet und beendet sich mit Exitcode 0"
+
       - name: Inno Setup 6 installieren
         run: choco install innosetup -y
 

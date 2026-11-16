@@ -4,6 +4,37 @@ Die Release Notes jedes veröffentlichten Releases (Tag `v*`) werden aus dem
 passenden Abschnitt dieser Datei erzeugt (siehe `.github/workflows/build-windows.yml`
 und `packaging/extract_release_notes.py`).
 
+<!--
+TEMPLATE für einen neuen Abschnitt (einfach einkommentieren und ausfüllen):
+
+## vX.Y.Z – JJJJ-MM-TT
+
+### Neu
+- …
+
+### Geändert
+- …
+
+### Behoben
+- …
+
+### Entfernt
+- …
+
+Konventionen: neueste Version oben; Datum ISO (JJJJ-MM-TT); Sprache Deutsch;
+ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
+Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
+-->
+
+## v1.1.1 – 2026-11-15
+
+### Behoben
+- **Startfehler des Installers:** „Failed to execute script 'app' … attempted relative
+  import with no known parent package“. Ursache: PyInstaller-Entry-Skript mit relativen
+  Importen. Jetzt dünner Einstiegspunkt `packaging/entry.py` mit absolutem Import;
+  zusätzlich CI-Smoke-Test („EXE --version“ muss mit Exitcode 0 enden), damit ein solcher
+  Importfehler nie wieder unbemerkt in ein Release gelangt.
+
 ## v1.1.0 – 2026-11-15
 
 ### Neu

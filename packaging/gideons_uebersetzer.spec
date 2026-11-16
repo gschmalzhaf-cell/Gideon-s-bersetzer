@@ -13,7 +13,11 @@ Ohne CUDA-Build bündelt PyInstaller die CPU-Variante – die App läuft dann
 mit entsprechender Warnung auf der CPU.
 """
 
+import os
+
 from PyInstaller.utils.hooks import collect_all
+
+SPEC_DIR = SPECPATH  # Ordner der .spec-Datei (packaging/)
 
 datas = []
 binaries = []
@@ -52,15 +56,16 @@ for pkg in ("llama_cpp", "pymupdf", "ebooklib", "huggingface_hub", "rapidocr_onn
         pass
 
 a = Analysis(
-    ["../src/gideons_uebersetzer/app.py"],
-    pathex=["../src"],
+    [os.path.join(SPEC_DIR, "entry.py")],  # dünner Einstiegspunkt mit absolutem Import (siehe entry.py)
+    pathex=[os.path.join(SPEC_DIR, "..", "src")],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=["tkinter", "matplotlib", "numpy", "pandas", "scipy"],
+    # numpy NICHT ausschließen: cv2/onnxruntime/rapidocr (OCR) brauchen es zur Laufzeit!
+    excludes=["tkinter", "matplotlib", "pandas", "scipy"],
     noarchive=False,
     optimize=0,
 )

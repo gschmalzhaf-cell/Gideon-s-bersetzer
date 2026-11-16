@@ -2,21 +2,30 @@
 
 Beim ersten Start läuft der Assistent (Offline-Weg an erster Stelle);
 danach öffnet sich das Hauptfenster.
+
+Hinweis: PySide6 und die Fenstermdodule werden erst nach dem --version-Check
+importiert, damit „--version“ auch ohne GUI-Stack (z. B. CI-Smoke-Test) läuft.
 """
 
 from __future__ import annotations
 
 import sys
 
-from PySide6.QtCore import QCoreApplication
-from PySide6.QtWidgets import QApplication, QMessageBox
-
-from .main_window import MainWindow
-from .settings import load_settings, save_settings
-from .wizard import FirstStartWizard
-
 
 def main() -> int:
+    if "--version" in sys.argv:
+        from . import __version__
+
+        print(f"Gideon's Übersetzer {__version__}")
+        return 0
+
+    from PySide6.QtCore import QCoreApplication
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    from .main_window import MainWindow
+    from .settings import load_settings, save_settings
+    from .wizard import FirstStartWizard
+
     QCoreApplication.setOrganizationName("Gideons-Uebersetzer")
     QCoreApplication.setApplicationName("Gideons-Uebersetzer")
     app = QApplication(sys.argv)
