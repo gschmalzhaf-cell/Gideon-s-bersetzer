@@ -66,6 +66,12 @@ oder lokal alles auf einmal: `packaging\build-windows.bat`
 (und bei Tags `v*`) auf einem `windows-latest`-Runner den Installer. Push auf `main` → Artefakt
 im Job + aktualisierter Draft-Release `latest-build`; Tag `v*.*` → veröffentlichter Release.
 
+**Release nach jeder Änderung (automatisch):** Sobald `CHANGELOG.md` oben einen neuen Abschnitt
+`## vX.Y.Z – …` enthält, der noch nicht als Tag existiert, pusht der `auto-release`-Job nach dem
+green Build automatisch den Tag `vX.Y.Z` → der Workflow veröffentlicht den Release inklusive der
+Release Notes aus genau diesem Abschnitt. Vorgehen also: Änderung committen, CHANGELOG-Abschnitt
+ergänzen, auf `main` pushen – Release erscheint von allein.
+
 Der Installer enthält **nicht** das Modell; die Anwendung lädt es beim ersten
 Start selbst. Siehe `packaging/README-de.txt`. Die Abnahme-Checkliste für einen
 frischen Windows-11-Rechner (1-Klick-Beweis, Offline-Beweis, epubcheck, Calibre,

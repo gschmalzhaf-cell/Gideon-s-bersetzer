@@ -95,3 +95,40 @@ jobs:
           } else {
             gh release create latest-build $setup --draft --title "Entwicklungs-Build (automatisch)" --notes $notes
           }
+
+  # Release nach jeder Änderung: Wenn CHANGELOG.md oben einen neuen, noch nicht
+  # getaggten Abschnitt "## vX.Y.Z" enthält, wird der Tag automatisch gepusht –
+  # dadurch startet der Tag-Build oben und veröffentlicht den Release mit den
+  # Release Notes aus genau diesem CHANGELOG-Abschnitt.
+  auto-release:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Repo inkl. Tags auschecken
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Neuen CHANGELOG-Abschnitt als Tag veröffentlichen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -e
+          version=$(grep -m1 -oE '^## v[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1 | sed 's/^## //')
+          if [ -z "$version" ]; then
+            echo "Kein neuer CHANGELOG-Abschnitt gefunden – kein Release."
+            exit 0
+          fi
+          if git ls-remote --tags origin "$version" | grep -q "$version"; then
+            echo "Tag $version existiert bereits – Release wurde schon veröffentlicht."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$version" -m "Release $version (automatisch aus CHANGELOG.md)"
+          git push origin "$version"
+          echo "Tag $version gepusht – der Tag-Build veröffentlicht jetzt den Release."
