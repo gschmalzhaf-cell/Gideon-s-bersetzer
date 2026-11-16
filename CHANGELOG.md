@@ -26,6 +26,18 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.1.3 – 2026-11-16
+
+### Behoben
+- **llama.dll lädt im fertigen Installer nicht** („Failed to load shared library …
+  not found when the application was frozen“): Das bis dato gebündelte CUDA-Build von
+  llama-cpp-python (cu124) hängt zur Laufzeit am NVIDIA-Treiber (nvcuda.dll) und ist auf
+  Rechnern ohne GPU nicht ladbar. Der Release-Build bündelt jetzt das CPU-Wheel von PyPI.
+  Zusätzlich sammelt PyInstaller die nativen DLLs (`llama_cpp/lib/*.dll`) jetzt pro
+  Collector einzeln, damit ein Importfehler auf dem Build-Rechner die DLLs nicht mehr aus
+  dem Bundle wirft. Neuer CI-Check: llama_cpp muss auf dem Runner ladbar sein und
+  llama.dll + ggml-DLLs müssen im EXE-Bundle liegen.
+
 ## v1.1.2 – 2026-11-16
 
 ### Geändert

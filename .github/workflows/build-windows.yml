@@ -49,17 +49,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt pyinstaller
 
-      - name: CUDA-Build von llama-cpp-python (best effort, sonst CPU-Wheel)
-        continue-on-error: true
-        run: |
-          pip install --force-reinstall --no-deps llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124
-          if ($LASTEXITCODE -ne 0) { pip install llama-cpp-python }
+      # Release-Build nutzt das CPU-Wheel aus requirements.txt: Das CUDA-Build (cu124)
+      # braucht zur Laufzeit den NVIDIA-Treiber (nvcuda.dll) und laedt auf Rechnern
+      # ohne GPU nicht ("Failed to load shared library ... llama.dll").
+      - name: llama.cpp pruefen (CPU-Wheel muss auf dem Runner ladbar sein)
+        run: python -c "import llama_cpp; llama_cpp.llama_supports_gpu_offload(); print('llama_cpp nativ ladbar')"
 
       - name: Tests laufen lassen
         run: python -m pytest -q
 
       - name: PyInstaller – eine EXE (packaging\dist\Gideons-Uebersetzer.exe)
         run: pyinstaller packaging/gideons_uebersetzer.spec --clean --noconfirm --distpath packaging/dist --workpath build/pyinstaller
+
+      - name: Pruefen – llama-DLLs liegen im EXE-Bundle
+        run: python -c "from PyInstaller.archive.readers import CArchiveReader; names=list(CArchiveReader('packaging/dist/Gideons-Uebersetzer.exe').toc); dlls=[n for n in names if n.startswith('llama_cpp/lib/') and n.lower().endswith('.dll')]; print(chr(10).join(dlls)); assert any(n.endswith('llama.dll') for n in dlls), 'llama.dll fehlt im Bundle'; assert any('ggml' in n for n in dlls), 'ggml-DLLs fehlen im Bundle'; print('llama-Bundle ok:', len(dlls), 'DLLs')"
 
       - name: Smoke-Test – EXE startet ohne Importfehler (--version, Exitcode 0)
         shell: pwsh

@@ -15,7 +15,7 @@ mit entsprechender Warnung auf der CPU.
 
 import os
 
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs, collect_submodules
 
 SPEC_DIR = SPECPATH  # Ordner der .spec-Datei (packaging/)
 
@@ -47,11 +47,19 @@ hiddenimports = [
 # Native Bibliotheken und Datendateien einsammeln (gguf-Bibliothek, CUDA-DLLs,
 # pymupdf-DLLs, OCR: ONNX-Runtime + OpenCV + RapidOCR-Modelle)
 for pkg in ("llama_cpp", "pymupdf", "ebooklib", "huggingface_hub", "rapidocr_onnxruntime", "onnxruntime", "cv2"):
+    # Pro Collector einzeln absichern: collect_submodules importiert das Paket und kann
+    # fehlschlagen, wenn dessen native lib auf dem Build-Rechner nicht laedt; die DLLs
+    # (collect_dynamic_libs = reiner Dateiscan) duerfen dadurch nicht verloren gehen.
     try:
-        d, b, h = collect_all(pkg)
-        datas += d
-        binaries += b
-        hiddenimports += h
+        datas += collect_data_files(pkg)
+    except Exception:
+        pass
+    try:
+        binaries += collect_dynamic_libs(pkg)
+    except Exception:
+        pass
+    try:
+        hiddenimports += collect_submodules(pkg)
     except Exception:
         pass
 

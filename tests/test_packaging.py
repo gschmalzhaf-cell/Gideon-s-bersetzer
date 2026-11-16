@@ -27,6 +27,21 @@ def test_bat_uebergibt_version_an_iscc_und_benennt_um():
     assert "Tolino-Uebersetzer-Setup-%VERSION%.exe" in bat
 
 
+def test_spec_sammelt_native_dlls_einzeln_pro_collector():
+    spec = (ROOT / "packaging" / "gideons_uebersetzer.spec").read_text(encoding="utf-8")
+    assert "collect_dynamic_libs" in spec
+    assert "collect_data_files" in spec
+    assert "collect_submodules" in spec
+
+
+def test_ci_kein_cuda_wheel_im_release_build_und_bundle_check():
+    wf = (ROOT / ".github" / "workflows" / "build-windows.yml").read_text(encoding="utf-8")
+    assert "abetlen.github.io" not in wf
+    assert "llama_supports_gpu_offload" in wf
+    assert "CArchiveReader" in wf
+    assert "llama.dll" in wf
+
+
 def test_changelog_oberster_abschnitt_ist_semver():
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     top = re.findall(r"^## (v\d+\.\d+\.\d+)", changelog, flags=re.M)[0]
