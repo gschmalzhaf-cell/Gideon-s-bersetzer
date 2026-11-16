@@ -62,7 +62,8 @@ jobs:
         run: pyinstaller packaging/gideons_uebersetzer.spec --clean --noconfirm --distpath packaging/dist --workpath build/pyinstaller
 
       - name: Pruefen – llama-DLLs liegen im EXE-Bundle
-        run: python -c "from PyInstaller.archive.readers import CArchiveReader; names=list(CArchiveReader('packaging/dist/Gideons-Uebersetzer.exe').toc); dlls=[n for n in names if n.startswith('llama_cpp/lib/') and n.lower().endswith('.dll')]; print(chr(10).join(dlls)); assert any(n.endswith('llama.dll') for n in dlls), 'llama.dll fehlt im Bundle'; assert any('ggml' in n for n in dlls), 'ggml-DLLs fehlen im Bundle'; print('llama-Bundle ok:', len(dlls), 'DLLs')"
+        run: |
+          python -c "from PyInstaller.archive.readers import CArchiveReader; names=[n.replace(chr(92),'/') for n in CArchiveReader('packaging/dist/Gideons-Uebersetzer.exe').toc]; dlls=[n for n in names if n.lower().endswith('.dll') and ('llama' in n.lower() or 'ggml' in n.lower())]; print(chr(10).join(dlls)); assert any(n.endswith('llama.dll') for n in dlls), 'llama.dll fehlt im Bundle'; assert any('ggml' in n.lower() for n in dlls), 'ggml-DLLs fehlen im Bundle'; print('llama-Bundle ok', len(dlls), 'DLLs')"
 
       - name: Smoke-Test – EXE startet ohne Importfehler (--version, Exitcode 0)
         shell: pwsh
