@@ -46,3 +46,15 @@ def test_changelog_oberster_abschnitt_ist_semver():
     changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     top = re.findall(r"^## (v\d+\.\d+\.\d+)", changelog, flags=re.M)[0]
     assert re.fullmatch(r"v\d+\.\d+\.\d+", top)
+
+
+def test_app_version_matches_changelog_top():
+    import re
+
+    import gideons_uebersetzer
+
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    top = re.findall(r"^## (v\d+\.\d+\.\d+)", changelog, flags=re.M)[0]
+    assert gideons_uebersetzer.__version__ == top[1:]
+    pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert f'version = "{top[1:]}"' in pyproject

@@ -49,7 +49,10 @@ python -m gideons_uebersetzer modell info                           # Modell/Spe
 python -m gideons_uebersetzer modell loeschen                       # Modell löschen
 python -m gideons_uebersetzer uebersetzen buch.pdf                  # offline übersetzen
 python -m gideons_uebersetzer uebersetzen buch.pdf --tool api --online --api-key ...
+python -m gideons_uebersetzer report                 # Diagnose-Report (Markdown + JSON) speichern
 ```
+
+In der GUI gibt es dafür den Knopf „Report erstellen …“.
 
 GUI (M3):
 

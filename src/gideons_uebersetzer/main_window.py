@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import model_manager, pdf_reader
+from . import model_manager, pdf_reader, report as report_mod
 from .cache import TranslationCache
 from .pipeline import CancelledError, PipelineListener, TranslationPipeline
 from .settings import Settings, save_settings
@@ -458,8 +458,12 @@ class MainWindow(QMainWindow):
         self.lbl_tool = QLabel()
         btn_settings = QPushButton("Einstellungen …")
         btn_settings.clicked.connect(self._open_settings)
+        btn_report = QPushButton("Report erstellen …")
+        btn_report.setToolTip("Diagnose-Report als Markdown-Datei speichern (kein API-Schlüssel, keine Buchinhalte)")
+        btn_report.clicked.connect(self._create_report)
         tool_row.addWidget(self.lbl_tool)
         tool_row.addStretch(1)
+        tool_row.addWidget(btn_report)
         tool_row.addWidget(btn_settings)
         layout.addLayout(tool_row)
 
@@ -516,6 +520,24 @@ class MainWindow(QMainWindow):
         self._refresh_tool_label()
 
     # --- Anzeige ---
+
+    def _on_worker_log(self, message: str) -> None:
+        report_mod.add_log_line(message)
+        self.txt_log.appendPlainText(message)
+
+    def _create_report(self) -> None:
+        try:
+            path = report_mod.write_report(self.settings)
+        except OSError as exc:
+            QMessageBox.warning(self, "Report", f"Report konnte nicht gespeichert werden: {exc}")
+            return
+        QMessageBox.information(
+            self,
+            "Report erstellt",
+            f"Diagnose-Report gespeichert unter:\n{path}\n\n"
+            "Zum Fehlerfinden/Qualität verbessern einfach diese Markdown-Datei weitergeben "
+            "(enthält keinen API-Schlüssel und keine Buchinhalte).",
+        )
 
     def _refresh_tool_label(self) -> None:
         if self.settings.tool == "api":
@@ -616,7 +638,7 @@ class MainWindow(QMainWindow):
 
         self._worker = _Worker(pdf_path, self.settings, cache, output_path, self)
         w = self._worker
-        w.log.connect(lambda m: self.txt_log.appendPlainText(m))
+        w.log.connect(self._on_worker_log)
         w.status.connect(self.lbl_status.setText)
         w.progress.connect(self._on_progress)
         w.eta.connect(lambda e: self.lbl_eta.setText(f"Geschätzte Restdauer: {fmt_duration(e)}" if e else ""))

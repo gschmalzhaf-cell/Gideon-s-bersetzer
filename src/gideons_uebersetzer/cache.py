@@ -25,6 +25,7 @@ class CachedChunk:
     text: str
     translation: str
     status: str  # STATUS_DONE oder STATUS_FAILED
+    problem: str = ""  # bei STATUS_FAILED: Grund der Qualitätsprüfung
 
 
 class TranslationCache:
@@ -62,6 +63,7 @@ class TranslationCache:
                 text=c.get("text", ""),
                 translation=c.get("translation", ""),
                 status=c.get("status", STATUS_DONE),
+                problem=c.get("problem", ""),
             )
             for c in data.get("chunks", [])
         ]
@@ -85,8 +87,10 @@ class TranslationCache:
     def get(self, index: int) -> CachedChunk | None:
         return self.chunks.get(index)
 
-    def record(self, index: int, source_text: str, translation: str, status: str) -> None:
-        self.chunks[index] = CachedChunk(index=index, text=source_text, translation=translation, status=status)
+    def record(self, index: int, source_text: str, translation: str, status: str, problem: str = "") -> None:
+        self.chunks[index] = CachedChunk(
+            index=index, text=source_text, translation=translation, status=status, problem=problem
+        )
         self.save()
 
     def save(self) -> None:
@@ -96,7 +100,7 @@ class TranslationCache:
             "tool": self.tool,
             "created_at": self.created_at,
             "chunks": [
-                {"index": c.index, "text": c.text, "translation": c.translation, "status": c.status}
+                {"index": c.index, "text": c.text, "translation": c.translation, "status": c.status, "problem": c.problem}
                 for c in sorted(self.chunks.values(), key=lambda c: c.index)
             ],
         }

@@ -236,6 +236,17 @@ def _cmd_uebersetzen(args) -> int:
     return 0
 
 
+def _cmd_report(args) -> int:
+    from . import report
+
+    settings = settings_mod.load_settings()
+    out = Path(args.report_out) if args.report_out else None
+    path = report.write_report(settings, out)
+    print(f"Report gespeichert: {path}\n")
+    print(report.build_report(settings))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog="gideons-uebersetzer",
@@ -265,6 +276,11 @@ def main(argv: list[str] | None = None) -> int:
                       help="OCR-Backend für Scans (Standard: aus Einstellungen). 'mistral' nur im Online-Betrieb – "
                            "Seitenbilder werden dann an Mistral gesendet")
     p_tr.set_defaults(func=_cmd_uebersetzen)
+
+    p_rep = sub.add_parser("report", help="Diagnose-Report (Markdown + JSON-Anhang) erstellen")
+    p_rep.add_argument("--out", dest="report_out", default=None,
+                       help="Zieldatei (Standard: Zielordner mit Zeitstempel); der Report wird auch ausgegeben")
+    p_rep.set_defaults(func=_cmd_report)
 
     args = parser.parse_args(argv)
     return args.func(args)

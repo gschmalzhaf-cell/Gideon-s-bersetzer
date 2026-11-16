@@ -182,7 +182,7 @@ class TranslationPipeline:
                 raise
             except ChunkFailedError as exc:
                 problem = str(exc)
-                self.cache.record(chunk.index, chunk.text, "", STATUS_FAILED)
+                self.cache.record(chunk.index, chunk.text, "", STATUS_FAILED, problem=problem)
                 translations[chunk.index] = None
                 self.listener.on_log(
                     f"Abschnitt {chunk.index + 1} konnte nach {1 + MAX_RETRIES} Versuchen nicht übersetzt werden "
@@ -190,7 +190,7 @@ class TranslationPipeline:
                 )
             except Exception as exc:
                 problem = str(exc) or exc.__class__.__name__
-                self.cache.record(chunk.index, chunk.text, "", STATUS_FAILED)
+                self.cache.record(chunk.index, chunk.text, "", STATUS_FAILED, problem=problem)
                 translations[chunk.index] = None
                 self.listener.on_log(
                     f"Abschnitt {chunk.index + 1} ist fehlgeschlagen ({problem}). Er wird im EPUB mit einer Notiz versehen."

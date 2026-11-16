@@ -26,6 +26,17 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.1.5 – 2026-11-16
+
+### Neu
+- **Diagnose-Report:** neuer CLI-Befehl `report` und ein Knopf „Report erstellen …“ in der GUI.
+  Erzeugt eine einzelne Markdown-Datei (Klartext-Abschnitte + JSON-Anhang) mit App-Version,
+  Plattform, Einstellungen (API-Schlüssel redigiert), Modell-Status, OCR-Backend, allen
+  Zwischenspeichern inklusive fehlgeschlagener Abschnitte samt Qualitäts-Problem und kurzem
+  Quelltext-Ausschnitt (max. 300 Zeichen) sowie dem Log-Tail. Zum Fehlerfinden bzw. zur
+  Qualitätsverbesserung einfach die Datei weitergeben – sie enthält weder API-Schlüssel
+  noch Buchinhalte.
+
 ## v1.1.4 – 2026-11-16
 
 ### Neu
