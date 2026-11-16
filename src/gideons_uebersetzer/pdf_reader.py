@@ -127,10 +127,18 @@ def _ocr_heading(text: str, prev_y: float | None, y: float, height: float) -> bo
     return prev_y is None  # erste Zeile der Seite
 
 
-def extract_book(path: str | Path, ocr: bool = True, progress_cb=None) -> PdfBook:
+def extract_book(
+    path: str | Path,
+    ocr: bool = True,
+    progress_cb=None,
+    ocr_backend: str = "local",
+    api_key: str = "",
+) -> PdfBook:
     """Liest ein PDF ein und liefert ein PdfBook mit Kapiteln und Absätzen.
 
     Seiten ohne Textebene (eingescannt) werden per OCR erkannt, sofern ocr=True.
+    ocr_backend: "local" (RapidOCR, offline) oder "mistral" (Mistral-OCR-API; nur mit
+    api_key, gedacht für den Online-Betrieb – Seitenbilder werden dann an Mistral gesendet).
     progress_cb(page_nr, page_gesamt, modus) – modus ist "Text" oder "OCR".
 
     Raises:
@@ -170,13 +178,29 @@ def extract_book(path: str | Path, ocr: bool = True, progress_cb=None) -> PdfBoo
             if not _page_has_text(page_dict):
                 if not ocr:
                     raise ScannedPdfError(page_number)
+                if progress_cb is not None:
+                    progress_cb(page_number, page_count, "OCR")
+                if ocr_backend == "mistral":
+                    from . import mistral_ocr
+
+                    try:
+                        markdown = mistral_ocr.ocr_page_markdown(doc[page_number - 1], api_key)
+                    except mistral_ocr.MistralOcrError as exc:
+                        raise PdfError(f"Seite {page_number}: {exc}") from exc
+                    for text, is_heading in mistral_ocr.markdown_to_blocks(markdown):
+                        if _PAGE_NUMBER_RE.match(text):
+                            continue
+                        if is_heading:
+                            current = Chapter(title=text)
+                            chapters.append(current)
+                        else:
+                            current.paragraphs.append(Paragraph(text, page_number))
+                    continue
                 if not ocr_reader.ocr_available():
                     raise PdfError(
                         f"Seite {page_number} enthält keine Textebene (nur Bilder), und das OCR-Modul "
                         "ist nicht verfügbar. Bitte Anwendung neu installieren oder OCR ausschalten."
                     )
-                if progress_cb is not None:
-                    progress_cb(page_number, page_count, "OCR")
                 ocr_lines = ocr_reader.ocr_page_lines(doc[page_number - 1])
                 prev_y: float | None = None
                 paragraph_parts: list[str] = []

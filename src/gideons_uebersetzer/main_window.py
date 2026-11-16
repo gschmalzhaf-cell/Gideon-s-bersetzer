@@ -87,8 +87,15 @@ class _Worker(QThread):
                 if modus == "OCR":
                     self.log.emit(f"Seite {page_nr}/{page_total}: OCR (gescannte Seite) …")
 
+            ocr_backend = self.settings.effective_ocr_backend(self.settings.tool, self.settings.online_enabled)
+            if self.settings.ocr_backend == "mistral" and ocr_backend != "mistral":
+                self.log.emit("Hinweis: Mistral OCR ist nur im Online-Betrieb verfügbar – lokales OCR wird verwendet.")
             book = pdf_reader.extract_book(
-                self.pdf_path, ocr=self.settings.ocr_enabled, progress_cb=_extract_progress
+                self.pdf_path,
+                ocr=self.settings.ocr_enabled,
+                progress_cb=_extract_progress,
+                ocr_backend=ocr_backend,
+                api_key=self.settings.api_key,
             )
             self.log.emit(
                 f"PDF geladen: {book.title} – {book.page_count} Seiten, {book.word_count} Wörter, "
@@ -231,9 +238,15 @@ class SettingsDialog(QDialog):
         self.spin_chunk.setValue(settings.chunk_size)
         form.addRow("Wörter pro Abschnitt:", self.spin_chunk)
 
-        self.chk_ocr = QCheckBox("Gescannte PDF-Seiten per OCR erkennen (langsamer, lokal)")
+        self.chk_ocr = QCheckBox("Gescannte PDF-Seiten per OCR erkennen (langsamer)")
         self.chk_ocr.setChecked(settings.ocr_enabled)
         form.addRow("OCR:", self.chk_ocr)
+
+        self.cmb_ocr_backend = QComboBox()
+        self.cmb_ocr_backend.addItem("Lokal (RapidOCR, ohne Datenversand)", "local")
+        self.cmb_ocr_backend.addItem("Mistral OCR – nur im Online-Betrieb, Seitenbilder gehen an Mistral", "mistral")
+        self.cmb_ocr_backend.setCurrentIndex(1 if settings.ocr_backend == "mistral" else 0)
+        form.addRow("OCR-Backend:", self.cmb_ocr_backend)
 
         glossar_row = QHBoxLayout()
         self.txt_glossar = QLineEdit(settings.glossary_path)
@@ -372,6 +385,7 @@ class SettingsDialog(QDialog):
         s.temperature = self.spin_temp.value()
         s.chunk_size = self.spin_chunk.value()
         s.ocr_enabled = self.chk_ocr.isChecked()
+        s.ocr_backend = self.cmb_ocr_backend.currentData()
         s.glossary_path = self.txt_glossar.text().strip()
         s.output_dir = self.txt_output.text().strip()
         s.model_path = self.txt_model.text().strip()

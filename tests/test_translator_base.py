@@ -73,3 +73,26 @@ def test_load_glossary(tmp_path):
     assert entries == [("Sherlock Holmes", "Sherlock Holmes"), ("London", "London")]
     assert load_glossary(None) == []
     assert load_glossary(tmp_path / "fehlt.txt") == []
+
+
+def test_sanitize_strips_fences_markers_and_quotes():
+    from gideons_uebersetzer.translator_base import sanitize_translation
+
+    assert sanitize_translation('Translation:\n"""\nHallo Welt.\n"""') == "Hallo Welt."
+    assert sanitize_translation("```de\nHallo Welt.\n```") == "Hallo Welt."
+    assert sanitize_translation('"Hallo Welt."') == "Hallo Welt."
+    assert sanitize_translation("Hier ist die Übersetzung: Hallo Welt.") == "Hallo Welt."
+    assert sanitize_translation("Here is the translation: Hallo Welt.") == "Hallo Welt."
+    assert sanitize_translation("Hallo Welt.<|im_end|>") == "Hallo Welt."
+    assert sanitize_translation("Übersetzung:\nHallo Welt.") == "Hallo Welt."
+    assert sanitize_translation("Hallo Welt.") == "Hallo Welt."
+    assert sanitize_translation("Erster Absatz.\n\n\n\nZweiter Absatz.") == "Erster Absatz.\n\nZweiter Absatz."
+
+
+def test_quality_check_passes_after_sanitize():
+    from gideons_uebersetzer.translator_base import quality_check, sanitize_translation
+
+    src = "The quick brown fox jumps over the lazy dog. " * 5
+    good = "Der schnelle braune Fuchs springt über den faulen Hund. " * 5
+    dirty = 'Translation:\n"""\n' + good + '\n"""'
+    assert quality_check(src, sanitize_translation(dirty)) is None

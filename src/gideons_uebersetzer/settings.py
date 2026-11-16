@@ -15,9 +15,13 @@ from pathlib import Path
 
 DEFAULT_API_ENDPOINT = "https://api.mistral.ai/v1/chat/completions"
 DEFAULT_API_MODEL = "mistral-small-latest"
-DEFAULT_HF_REPO = "bartowski/Mistral-7B-Instruct-v0.3-GGUF"
-DEFAULT_HF_FILENAME = "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"
-LEGACY_HF_FILENAME = "Mistral-7B-Instruct-v0.3.Q4_K_M.gguf"
+DEFAULT_HF_REPO = "bartowski/Qwen2.5-7B-Instruct-GGUF"
+DEFAULT_HF_FILENAME = "Qwen2.5-7B-Instruct-Q4_K_M.gguf"
+# Aeltere Standard-Dateinamen: lokal vorhandene Modelle werden nicht erneut geladen.
+LEGACY_HF_FILENAMES = (
+    "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",  # v1.1.2 und neuer (HF-Neuschema)
+    "Mistral-7B-Instruct-v0.3.Q4_K_M.gguf",  # bis v1.1.1 (altes HF-Schema, 404 seit Umbenennung)
+)
 DEFAULT_CHUNK_WORDS = 1500
 DEFAULT_TEMPERATURE = 0.3
 
@@ -57,9 +61,10 @@ def default_output_dir() -> Path:
 def default_model_path() -> Path:
     path = models_dir() / DEFAULT_HF_FILENAME
     if not path.is_file():
-        legacy = models_dir() / LEGACY_HF_FILENAME
-        if legacy.is_file():
-            return legacy
+        for legacy_name in LEGACY_HF_FILENAMES:
+            legacy = models_dir() / legacy_name
+            if legacy.is_file():
+                return legacy
     return path
 
 
@@ -80,6 +85,7 @@ class Settings:
     hf_filename: str = DEFAULT_HF_FILENAME
     output_dir: str = ""  # leer = Standard-Zielordner
     ocr_enabled: bool = True  # gescannte PDF-Seiten per OCR erkennen
+    ocr_backend: str = "local"  # "local" (RapidOCR) oder "mistral" (nur im Online-Betrieb)
     first_start_done: bool = False
 
     def resolved_model_path(self) -> Path:
@@ -87,6 +93,12 @@ class Settings:
 
     def resolved_output_dir(self) -> Path:
         return Path(self.output_dir) if self.output_dir else default_output_dir()
+
+    def effective_ocr_backend(self, tool: str, online: bool) -> str:
+        """Mistral OCR nur im Online-Betrieb mit API-Tool; sonst lokales OCR."""
+        if self.ocr_backend == "mistral" and tool == "api" and online:
+            return "mistral"
+        return "local"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -108,8 +120,12 @@ def load_settings(path: Path | None = None) -> Settings:
             settings = Settings.from_dict(data)
     except (OSError, ValueError):
         pass
-    if settings.hf_filename == LEGACY_HF_FILENAME and not (models_dir() / LEGACY_HF_FILENAME).is_file():
+    if settings.hf_filename in LEGACY_HF_FILENAMES and not any(
+        (models_dir() / name).is_file() for name in LEGACY_HF_FILENAMES
+    ):
         settings.hf_filename = DEFAULT_HF_FILENAME
+    if settings.ocr_backend not in ("local", "mistral"):
+        settings.ocr_backend = "local"
     return settings
 
 

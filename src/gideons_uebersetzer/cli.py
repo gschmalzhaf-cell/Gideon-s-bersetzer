@@ -160,12 +160,26 @@ def _cmd_uebersetzen(args) -> int:
     if not ocr:
         print("Hinweis: OCR ist ausgeschaltet – reine Scan-PDFs werden abgelehnt.")
 
+    tool = args.tool or settings.tool
+    online = settings.online_enabled or args.online
+    ocr_backend = args.ocr_backend or settings.ocr_backend
+    if ocr_backend == "mistral" and not (tool == "api" and online):
+        print("Hinweis: Mistral OCR ist nur im Online-Betrieb (Mistral-API, bewusst eingeschaltet) verfügbar – "
+              "lokales OCR wird verwendet.")
+        ocr_backend = "local"
+
     def _extract_progress(page_nr: int, page_total: int, modus: str) -> None:
         if modus == "OCR":
             print(f"  Seite {page_nr}/{page_total}: OCR (gescannte Seite) …", flush=True)
 
     try:
-        book = pdf_reader.extract_book(args.pdf, ocr=ocr, progress_cb=_extract_progress)
+        book = pdf_reader.extract_book(
+            args.pdf,
+            ocr=ocr,
+            progress_cb=_extract_progress,
+            ocr_backend=ocr_backend,
+            api_key=args.api_key or settings.api_key,
+        )
     except pdf_reader.PdfError as exc:
         print(f"Fehler: {exc}")
         return 1
@@ -247,6 +261,9 @@ def main(argv: list[str] | None = None) -> int:
     p_tr.add_argument("--no-resume", action="store_true", help="Keinen vorhandenen Zwischenspeicher verwenden")
     p_tr.add_argument("--no-cover", action="store_true", help="Kein Deckbild aus der ersten PDF-Seite übernehmen")
     p_tr.add_argument("--no-ocr", action="store_true", help="OCR ausschalten – reine Scan-PDFs werden abgelehnt")
+    p_tr.add_argument("--ocr-backend", choices=["local", "mistral"], default=None,
+                      help="OCR-Backend für Scans (Standard: aus Einstellungen). 'mistral' nur im Online-Betrieb – "
+                           "Seitenbilder werden dann an Mistral gesendet")
     p_tr.set_defaults(func=_cmd_uebersetzen)
 
     args = parser.parse_args(argv)

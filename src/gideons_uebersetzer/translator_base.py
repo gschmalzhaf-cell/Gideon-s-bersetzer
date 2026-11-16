@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -143,6 +144,48 @@ def build_messages(
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": "\n\n".join(parts)},
     ]
+
+
+# Muster fuer typische Modell-Artefakte am Anfang einer Antwort (Echo des Prompts).
+_LEADING_MARKER_RE = re.compile(
+    r"^\s*(?:hier ist die [üu]bersetzung|here is the translation|here's the translation|"
+    r"[üu]bersetzung|translation|ausgabe|output)\s*:?\s*",
+    re.IGNORECASE,
+)
+
+
+def sanitize_translation(text: str) -> str:
+    """Entfernt typische Artefakte aus der Modell-Antwort, bevor sie geprueft wird.
+
+    Kleine Modelle (z. B. 7B) echoen gelegentlich Prompt-Bestandteile: Code-Fences,
+    eine fuehrende Zeile wie "Translation:", Anfuehrungszeichen um den ganzen Text
+    oder Chat-Template-Reste. Diese werden hier abgeschnitten; der eigentliche
+    Uebersetzungstext bleibt unveraendert.
+    """
+    out = text.strip()
+    # Code-Fences (``` ... ```) um den gesamten Text entfernen
+    fence = re.match(r"^```[a-zA-Z]*\s*\n(.*)\n?```\s*$", out, re.DOTALL)
+    if fence:
+        out = fence.group(1).strip()
+    # Marker-Zeilen, Echo der """-Markierung und umschliessende Anfuehrungszeichen
+    # in bis zu drei Durchlaeufen entfernen (Reihenfolge variiert je nach Modell)
+    for _ in range(3):
+        before = out
+        out = _LEADING_MARKER_RE.sub("", out, count=1).strip()
+        out = re.sub(r'^"""\s*', "", out)
+        out = re.sub(r'\s*"""\s*$', "", out)
+        out = out.strip()
+        if len(out) >= 2 and out[0] in "\"'“”«»" and out[-1] == out[0]:
+            out = out[1:-1].strip()
+        if out == before:
+            break
+    # Chat-Template-Reste und Stop-Marker
+    out = re.sub(r"<\|im_start\|>|<\|im_end\|>|<\|endoftext\|>", "", out).strip()
+    # uebrige einzelne Fence-Zeilen mitten im Text
+    out = re.sub(r"^```[a-zA-Z]*\s*$", "", out, flags=re.MULTILINE).strip()
+    # ueberfluessige Leerzeilen kollabieren
+    out = re.sub(r"\n{3,}", "\n\n", out)
+    return out.strip()
 
 
 def quality_check(source: str, translated: str) -> str | None:

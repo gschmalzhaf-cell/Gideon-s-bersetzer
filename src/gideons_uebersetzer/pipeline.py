@@ -24,6 +24,7 @@ from .translator_base import (
     build_messages,
     load_glossary,
     quality_check,
+    sanitize_translation,
     split_into_chunks,
 )
 
@@ -109,9 +110,12 @@ class TranslationPipeline:
             if self._cancelled():
                 raise CancelledError("Übersetzung abgebrochen.")
             messages = build_messages(chunk.text, context, self.glossary, extra_hint=hint)
+            # Wiederholungen deterministisch (Temperatur 0), damit ein einmaliger
+            # Aussetzer nicht dreimal reproduziert wird.
+            temperature = self.settings.temperature if attempt == 0 else 0.0
             result = self.translator.translate_stream(
                 messages,
-                temperature=self.settings.temperature,
+                temperature=temperature,
                 on_token=self.listener.on_token,
                 cancel_event=self.cancel_event,
             )
@@ -119,6 +123,7 @@ class TranslationPipeline:
                 translation, chars = result
             else:
                 translation, chars = result, 0
+            translation = sanitize_translation(translation)
             problem = quality_check(chunk.text, translation)
             if problem is None:
                 return translation, chars
@@ -126,7 +131,11 @@ class TranslationPipeline:
             self.listener.on_log(
                 f"Abschnitt {chunk.index + 1}: Qualitätsprüfung fehlgeschlagen ({problem}) – Versuch {attempt + 1} von {1 + MAX_RETRIES}."
             )
-            hint = "Antworte ausschließlich mit der reinen deutschen Übersetzung, ohne jeden Zusatz."
+            hint = (
+                "Antworte ausschließlich mit der reinen deutschen Übersetzung des zu übersetzenden "
+                "Textes – ohne Einleitung, ohne „Translation:“-Zeile, ohne Code-Fences und ohne "
+                "Anführungszeichen um den gesamten Text. Übersetze JEDEN Satz vollständig ins Deutsche."
+            )
         raise ChunkFailedError(last_problem or "Unbekannter Fehler")
 
     def run(self) -> RunResult:

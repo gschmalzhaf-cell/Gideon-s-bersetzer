@@ -26,6 +26,24 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.1.4 – 2026-11-16
+
+### Neu
+- **Besseres lokales Standardmodell:** Qwen2.5-7B-Instruct (Q4_K_M, ca. 4,7 GB, 32k Kontext)
+  statt Mistral-7B-Instruct-v0.3 – deutlich robustere deutsche Übersetzungen, weniger
+  Prompt-Echos. Bereits heruntergeladene Mistral-Modelle werden weiterhin verwendet
+  (kein erneuter Download); das Modell ist wie gehabt in den Einstellungen änderbar.
+- **Mistral OCR als optionales OCR-Backend** (Einstellungen/CLI `--ocr-backend mistral`):
+  gescannte Seiten werden dann über die Mistral-OCR-API (`mistral-ocr-latest`) erkannt.
+  Nur im bewusst eingeschalteten Online-Betrieb aktiv – dann werden die Seitenbilder
+  der Scans an Mistral übertragen (Text-Seiten nicht). Standard bleibt lokales RapidOCR.
+
+### Geändert
+- **Modell-Antworten werden bereinigt, bevor sie geprüft werden:** Code-Fences,
+  führende „Translation:“-/„Übersetzung:“-Zeilen, Anführungszeichen um den gesamten
+  Text und Chat-Template-Reste werden abgeschnitten. Retries laufen mit Temperatur 0
+  und einem verschärften Hinweis („jeden Satz vollständig übersetzen“).
+
 ## v1.1.3 – 2026-11-16
 
 ### Behoben

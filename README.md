@@ -4,14 +4,17 @@ Windows-Anwendung, die englischsprachige PDF-Dokumente ins Deutsche übersetzt
 und daraus eine EPUB-Datei für den Tolino-E-Book-Reader erzeugt.
 
 - **Offline (Standard):** eingebettetes llama.cpp (llama-cpp-python) mit
-  Mistral-7B-Instruct-v0.3 als GGUF (Q4_K_M, ca. 4,4 GB). Das Modell wird beim
+  Qwen2.5-7B-Instruct als GGUF (Q4_K_M, ca. 4,7 GB, 32k Kontext). Das Modell wird beim
   ersten Start einmalig heruntergeladen und liegt unter
   `%LOCALAPPDATA%\Tolino-Uebersetzer\models`. Danach läuft die Übersetzung
   vollständig lokal – kein Internet, kein API-Schlüssel.
 - **Notnagel (optional, nur nach bewusstem Einschalten):** Mistral-API
   (`https://api.mistral.ai/v1/chat/completions`, Modell `mistral-small-latest`,
   Streaming). In diesem Modus wird der Buchtext an Mistral übertragen; das steht
-  im Assistenten und in den Einstellungen.
+  im Assistenten und in den Einstellungen. Optional kann im Online-Betrieb auch
+  **Mistral OCR** (`mistral-ocr-latest`) für gescannte Seiten genutzt werden
+  (Einstellungen → OCR-Backend bzw. CLI `--ocr-backend mistral`); dann werden die
+  Seitenbilder der Scans an Mistral gesendet. Standard bleibt lokales OCR (RapidOCR).
 
 ## Meilensteine
 

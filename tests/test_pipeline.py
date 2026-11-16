@@ -134,3 +134,36 @@ def test_pipeline_cancel_via_event(tmp_path, sample_pdf):
     pipe.cancel_event.set()
     with pytest.raises(CancelledError):
         pipe.run()
+
+
+def test_pipeline_sanitizes_marker_answers(tmp_path, sample_pdf):
+    class MarkerTranslator:
+        def translate_stream(self, messages, temperature, on_token=None, cancel_event=None):
+            text = ("Deutscher Übersetzungstext für diesen Abschnitt. " * 12)[:400]
+            return f'Translation:\n"""\n{text}\n"""', 0
+
+    pipe, _book = _make_pipeline(tmp_path, sample_pdf, MarkerTranslator())
+    result = pipe.run()
+    assert result.chunks_failed == 0
+    assert result.chunks_done == result.chunks_total
+
+
+def test_pipeline_retry_uses_temperature_zero(tmp_path, sample_pdf):
+    temps = []
+
+    class FlakyTranslator:
+        def __init__(self):
+            self.n = 0
+
+        def translate_stream(self, messages, temperature, on_token=None, cancel_event=None):
+            temps.append(temperature)
+            self.n += 1
+            if self.n == 1:
+                return "", 0  # leere Antwort -> Qualitätsprüfung schlägt fehl -> Retry
+            return ("Deutscher Text für den Abschnitt. " * 20)[:400], 0
+
+    pipe, _book = _make_pipeline(tmp_path, sample_pdf, FlakyTranslator())
+    result = pipe.run()
+    assert result.chunks_failed == 0
+    assert temps[0] == 0.3  # erster Versuch mit eingestellter Temperatur
+    assert temps[1] == 0.0  # Retry deterministisch
