@@ -59,13 +59,17 @@ jobs:
           path: packaging/dist/Tolino-Uebersetzer-Setup.exe
           retention-days: 30
 
+      - name: Release Notes aus CHANGELOG.md extrahieren (bei Tag v*)
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python packaging/extract_release_notes.py ${{ github.ref_name }} CHANGELOG.md release-notes.txt
+
       - name: Release veröffentlichen (bei Tag v*)
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          gh release create ${{ github.ref_name }} packaging/dist/Tolino-Uebersetzer-Setup.exe --title "Gideon's Übersetzer ${{ github.ref_name }}" --notes "Installer (Tolino-Uebersetzer-Setup.exe). Enthält NICHT das Übersetzungsmodell – die App lädt es beim ersten Start selbst (Assistent, Offline-Weg an erster Stelle). Details: packaging/README-de.txt."
+          gh release create ${{ github.ref_name }} packaging/dist/Tolino-Uebersetzer-Setup.exe --title "Gideon's Übersetzer ${{ github.ref_name }}" --notes-file release-notes.txt
 
       - name: Draft-Release aktualisieren (bei Push auf main)
         if: github.ref == 'refs/heads/main'
