@@ -26,6 +26,16 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.1.6 – 2026-11-16
+
+### Neu
+- **Update-Funktion (manuell, nie automatisch):** Knopf „Update …“ in der GUI bzw. CLI `update`
+  prüft die neueste GitHub-Release (`api.github.com`), lädt bei Bedarf den versionierten Installer
+  (`Tolino-Uebersetzer-Setup-<Version>.exe`) mit Fortschritt/Abbruch/Fortsetzen von github.com und
+  startet ihn (gleiche AppId → Upgrade der bestehenden Installation; die App beendet sich dafür).
+  `update --check` prüft nur. Es gibt keinen Auto-Check beim Start – der Offline-Standard bleibt
+  unangetastet; die Update-Prüfung kontaktiert GitHub nur auf ausdrücklichen Klick und meldet das.
+
 ## v1.1.5 – 2026-11-16
 
 ### Neu

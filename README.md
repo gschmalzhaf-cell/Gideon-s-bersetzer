@@ -50,7 +50,12 @@ python -m gideons_uebersetzer modell loeschen                       # Modell lö
 python -m gideons_uebersetzer uebersetzen buch.pdf                  # offline übersetzen
 python -m gideons_uebersetzer uebersetzen buch.pdf --tool api --online --api-key ...
 python -m gideons_uebersetzer report                 # Diagnose-Report (Markdown + JSON) speichern
+python -m gideons_uebersetzer update --check         # nach neuerer Version auf GitHub suchen
+python -m gideons_uebersetzer update                 # Update laden + Installer starten
 ```
+
+In der GUI gibt es dafür die Knöpfe „Report erstellen …“ und „Update …“ (Update nur manuell,
+nie automatisch – kontaktiert dann api.github.com/github.com).
 
 In der GUI gibt es dafür den Knopf „Report erstellen …“.
 

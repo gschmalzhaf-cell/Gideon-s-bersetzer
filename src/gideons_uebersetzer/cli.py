@@ -236,6 +236,42 @@ def _cmd_uebersetzen(args) -> int:
     return 0
 
 
+def _cmd_update(args) -> int:
+    from . import __version__, updater
+
+    try:
+        rel = updater.latest_release()
+    except updater.UpdateError as exc:
+        print(f"Fehler: {exc}")
+        return 1
+    print(f"Installierte Version: {__version__} – neueste GitHub-Release: v{rel['version']} ({rel['asset_name']})")
+    if not updater.is_newer(rel["version"], __version__):
+        print("Kein Update verfügbar – die installierte Version ist aktuell.")
+        return 0
+    if args.check:
+        print("Update verfügbar (nur Prüfung mit --check).")
+        return 0
+    dest_dir = updater.default_download_dir()
+    print(f"Lade {rel['asset_name']} nach {dest_dir} …")
+    try:
+        path = updater.download_installer(
+            rel["asset_url"],
+            dest_dir,
+            asset_name=rel["asset_name"],
+            progress_cb=lambda d, t, s: print(f"\r  {d}/{t} Bytes", end="", flush=True),
+        )
+    except updater.UpdateError as exc:
+        print(f"\nFehler: {exc}")
+        return 1
+    except updater.UpdateCancelled:
+        print("\nDownload abgebrochen (Fortsetzen beim nächsten Aufruf möglich).")
+        return 130
+    print(f"\nInstaller gespeichert: {path}")
+    updater.run_installer(path)
+    print("Installer gestartet – die App wird dabei auf v" + rel["version"] + " aktualisiert.")
+    return 0
+
+
 def _cmd_report(args) -> int:
     from . import report
 
@@ -281,6 +317,11 @@ def main(argv: list[str] | None = None) -> int:
     p_rep.add_argument("--out", dest="report_out", default=None,
                        help="Zieldatei (Standard: Zielordner mit Zeitstempel); der Report wird auch ausgegeben")
     p_rep.set_defaults(func=_cmd_report)
+
+    p_up = sub.add_parser("update", help="Nach neuerer Version auf GitHub suchen und Installer laden/installieren "
+                                         "(kontaktiert api.github.com bzw. github.com – nur auf ausdrücklichen Aufruf)")
+    p_up.add_argument("--check", action="store_true", help="Nur prüfen und melden, nichts herunterladen")
+    p_up.set_defaults(func=_cmd_update)
 
     args = parser.parse_args(argv)
     return args.func(args)

@@ -14,9 +14,10 @@ from __future__ import annotations
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import QThread, QUrl, Signal
+from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
 from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -31,6 +32,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QProgressBar,
+    QProgressDialog,
     QPushButton,
     QSpinBox,
     QVBoxLayout,
@@ -157,6 +159,45 @@ class _Worker(QThread):
                     self._translator.close()
                 except Exception:
                     pass
+
+
+class _UpdateWorker(QObject):
+    """Lädt den Update-Installer im Hintergrund (mit Fortschritt/Abbruch)."""
+
+    progress = Signal(int, int, float)
+    finished = Signal(str)
+    failed = Signal(str)
+
+    def __init__(self, release: dict, dest_dir: Path):
+        super().__init__()
+        self.release = release
+        self.dest_dir = dest_dir
+        self.cancel_event = threading.Event()
+
+    def cancel(self) -> None:
+        self.cancel_event.set()
+
+    def run(self) -> None:
+        from . import updater
+
+        try:
+            dest = updater.download_installer(
+                self.release["asset_url"],
+                self.dest_dir,
+                asset_name=self.release["asset_name"],
+                progress_cb=lambda d, t, s: self.progress.emit(d, t, s),
+                cancel_event=self.cancel_event,
+            )
+        except updater.UpdateCancelled:
+            self.failed.emit("abgebrochen")
+            return
+        except updater.UpdateError as exc:
+            self.failed.emit(str(exc))
+            return
+        except Exception as exc:
+            self.failed.emit(f"Unerwarteter Fehler: {exc}")
+            return
+        self.finished.emit(str(dest))
 
 
 class _GuiListener(PipelineListener):
@@ -461,8 +502,12 @@ class MainWindow(QMainWindow):
         btn_report = QPushButton("Report erstellen …")
         btn_report.setToolTip("Diagnose-Report als Markdown-Datei speichern (kein API-Schlüssel, keine Buchinhalte)")
         btn_report.clicked.connect(self._create_report)
+        btn_update = QPushButton("Update …")
+        btn_update.setToolTip("Manuell nach neuer Version auf GitHub suchen (kontaktiert api.github.com)")
+        btn_update.clicked.connect(self._check_update)
         tool_row.addWidget(self.lbl_tool)
         tool_row.addStretch(1)
+        tool_row.addWidget(btn_update)
         tool_row.addWidget(btn_report)
         tool_row.addWidget(btn_settings)
         layout.addLayout(tool_row)
@@ -538,6 +583,74 @@ class MainWindow(QMainWindow):
             "Zum Fehlerfinden/Qualität verbessern einfach diese Markdown-Datei weitergeben "
             "(enthält keinen API-Schlüssel und keine Buchinhalte).",
         )
+
+    def _check_update(self) -> None:
+        from . import __version__, updater
+
+        QApplication.setOverrideCursor(Qt.WaitCursor)
+        try:
+            release = updater.check_for_update()
+        except updater.UpdateError as exc:
+            QApplication.restoreOverrideCursor()
+            QMessageBox.warning(self, "Update", f"Update-Prüfung fehlgeschlagen: {exc}")
+            return
+        QApplication.restoreOverrideCursor()
+        if release is None:
+            QMessageBox.information(self, "Update", f"Version {__version__} ist aktuell – kein Update verfügbar.")
+            return
+        answer = QMessageBox.question(
+            self,
+            "Update verfügbar",
+            f"Neue Version v{release['version']} ist verfügbar (installiert: v{__version__}).\n\n"
+            f"Jetzt {release['asset_name']} herunterladen und installieren?\n"
+            "Hinweis: Dafür wurde api.github.com kontaktiert; der Installer wird von github.com geladen.",
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._download_update(release)
+
+    def _download_update(self, release: dict) -> None:
+        from . import updater
+
+        self._update_progress = QProgressDialog(f"Update v{release['version']} wird geladen …", "Abbrechen", 0, 0, self)
+        self._update_progress.setWindowTitle("Update")
+        self._update_progress.setWindowModality(Qt.WindowModality.WindowModal)
+        self._update_thread = QThread(self)
+        self._update_worker = _UpdateWorker(release, updater.default_download_dir())
+        self._update_worker.moveToThread(self._update_thread)
+        self._update_thread.started.connect(self._update_worker.run)
+        self._update_worker.progress.connect(self._on_update_progress)
+        self._update_worker.finished.connect(self._on_update_finished)
+        self._update_worker.failed.connect(self._on_update_failed)
+        self._update_progress.canceled.connect(self._update_worker.cancel)
+        self._update_thread.start()
+
+    def _on_update_progress(self, done: int, total: int, speed: float) -> None:
+        if total > 0:
+            self._update_progress.setMaximum(total)
+            self._update_progress.setValue(done)
+        self._update_progress.setLabelText(f"{done / 1e6:.1f} / {total / 1e6:.1f} MB ({speed / 1e6:.1f} MB/s)")
+
+    def _on_update_finished(self, path: str) -> None:
+        self._update_progress.reset()
+        self._update_thread.quit()
+        self._update_thread.wait()
+        from . import updater
+
+        answer = QMessageBox.question(
+            self,
+            "Update heruntergeladen",
+            f"Installer gespeichert: {path}\n\nJetzt installieren? Die App wird dabei beendet und aktualisiert.",
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            updater.run_installer(Path(path))
+            QApplication.quit()
+
+    def _on_update_failed(self, message: str) -> None:
+        self._update_progress.reset()
+        self._update_thread.quit()
+        self._update_thread.wait()
+        if message != "abgebrochen":
+            QMessageBox.warning(self, "Update", f"Update-Download fehlgeschlagen: {message}")
 
     def _refresh_tool_label(self) -> None:
         if self.settings.tool == "api":
