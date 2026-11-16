@@ -18,6 +18,7 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - name: Repo auschecken
         uses: actions/checkout@v6
@@ -48,8 +49,10 @@ jobs:
       - name: Smoke-Test – EXE startet ohne Importfehler (--version, Exitcode 0)
         shell: pwsh
         run: |
-          & packaging/dist/Gideons-Uebersetzer.exe --version
-          if ($LASTEXITCODE -ne 0) { Write-Error "EXE startet nicht sauber (Exitcode $LASTEXITCODE) – wahrscheinlich Importfehler im Bundle"; exit 1 }
+          $exe = Join-Path $PWD "packaging\dist\Gideons-Uebersetzer.exe"
+          $p = Start-Process -FilePath $exe -ArgumentList "--version" -Wait -PassThru
+          Write-Host "Exitcode der EXE: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { Write-Error "EXE startet nicht sauber (Exitcode $($p.ExitCode)) – wahrscheinlich Importfehler im Bundle"; exit 1 }
           Write-Host "Smoke-Test ok: EXE startet und beendet sich mit Exitcode 0"
 
       - name: Inno Setup 6 installieren
