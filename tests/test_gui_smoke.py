@@ -67,3 +67,19 @@ def test_summary_dialog(qapp, tmp_path):
 
     dlg = SummaryDialog(R(), "api")
     dlg.close()
+
+
+def test_live_preview_appends(qapp, tmp_path, monkeypatch):
+    monkeypatch.setattr("gideons_uebersetzer.settings.default_settings_path", lambda: tmp_path / "settings.json")
+    win = MainWindow(Settings(output_dir=str(tmp_path)))
+    win._append_preview("Hallo ")
+    win._append_preview("Welt!")
+    assert "Hallo Welt!" in win.txt_preview.toPlainText()
+    win.close()
+
+
+def test_settings_dialog_has_model_presets(qapp):
+    dlg = SettingsDialog(Settings())
+    assert dlg.cmb_model.count() >= 3
+    assert dlg.cmb_model.currentData() == "qwen2.5-7b"
+    dlg.close()

@@ -15,7 +15,7 @@ import threading
 from pathlib import Path
 
 from PySide6.QtCore import QObject, Qt, QThread, QUrl, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtGui import QDesktopServices, QTextCursor
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
 from . import model_manager, pdf_reader, report as report_mod
 from .cache import TranslationCache
 from .pipeline import CancelledError, PipelineListener, TranslationPipeline
-from .settings import Settings, save_settings
+from .settings import LEGACY_HF_FILENAMES, MODEL_PRESETS, Settings, model_preset_index, save_settings
 from .translator_base import load_glossary
 from .wizard import DownloadWorker, FirstStartWizard
 
@@ -313,6 +313,17 @@ class SettingsDialog(QDialog):
         model_row.addWidget(btn_model_file)
         form.addRow("Offline-Modell:", model_row)
 
+        self.cmb_model = QComboBox()
+        for p in MODEL_PRESETS:
+            self.cmb_model.addItem(p["label"], p["id"])
+        idx = model_preset_index(settings.hf_repo, settings.hf_filename)
+        self.cmb_model.setCurrentIndex(idx if idx >= 0 else 0)
+        form.addRow("Modell-Download:", self.cmb_model)
+        self.lbl_model_hint = QLabel("")
+        self.lbl_model_hint.setWordWrap(True)
+        form.addRow("", self.lbl_model_hint)
+        self._update_model_hint()
+
         self.lbl_model_usage = QLabel("")
         self.lbl_model_usage.setWordWrap(True)
         form.addRow("Speicher:", self.lbl_model_usage)
@@ -365,38 +376,57 @@ class SettingsDialog(QDialog):
             f"frei auf dem Laufwerk: {model_manager.format_bytes(free)}"
         )
 
+    def _update_model_hint(self) -> None:
+        current = self.settings.resolved_model_path().name
+        if current in LEGACY_HF_FILENAMES:
+            self.lbl_model_hint.setText(
+                "Hinweis: Es ist ein älteres Modell geladen. Für deutlich bessere Übersetzungen "
+                "oben ein aktuelles Modell wählen und „Modell laden“ klicken."
+            )
+        else:
+            self.lbl_model_hint.setText("")
+
     def _download_model(self) -> None:
+        preset = MODEL_PRESETS[self.cmb_model.currentIndex()]
         s = Settings(**self.settings.to_dict())
+        s.hf_repo = preset["repo"]
+        s.hf_filename = preset["filename"]
         s.model_path = self.txt_model.text().strip()
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Modell wird geladen …")
-        dlg.resize(480, 120)
-        v = QVBoxLayout(dlg)
-        lbl = QLabel("Vorbereitung …")
-        lbl.setWordWrap(True)
-        bar = QProgressBar()
-        btn_cancel = QPushButton("Abbrechen")
-        v.addWidget(lbl)
-        v.addWidget(bar)
-        v.addWidget(btn_cancel)
+        dest = s.resolved_model_path()
+        if model_manager.is_model_present(dest):
+            QMessageBox.information(self, "Modell laden", f"Das gewählte Modell ist bereits vorhanden:\n{dest}")
+            return
+        progress = QProgressDialog(f"Modell wird geladen: {preset['filename']}", "Abbrechen", 0, 0, self)
+        progress.setWindowTitle("Modell-Download")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.setMinimumDuration(0)
         worker = DownloadWorker(s)
-        thread = QThread(dlg)
+        thread = QThread(self)
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
-        worker.progress.connect(lambda d, t, sp: (
-            bar.setMaximum(t), bar.setValue(d),
-            lbl.setText(f"{model_manager.format_bytes(d)} von {model_manager.format_bytes(t)} "
-                        f"({model_manager.format_bytes(sp)}/s)"),
-        ))
-        worker.finished.connect(lambda p: (lbl.setText(f"Fertig: {p}"), dlg.accept()))
-        worker.failed.connect(lambda m: (QMessageBox.warning(dlg, "Download fehlgeschlagen", m), dlg.reject()))
-        worker.cancelled.connect(lambda: (lbl.setText("Abgebrochen – Fortsetzen später möglich."), dlg.reject()))
-        btn_cancel.clicked.connect(worker.cancel)
+
+        def _on_progress(d, t, sp):
+            if t > 0:
+                progress.setMaximum(t)
+            progress.setValue(d)
+            progress.setLabelText(
+                f"{model_manager.format_bytes(d)} von {model_manager.format_bytes(t)} ({model_manager.format_bytes(sp)}/s)"
+            )
+
+        def _stop():
+            progress.reset()
+            progress.hide()
+            thread.quit()
+            thread.wait(3000)
+            self._refresh_usage()
+
+        worker.progress.connect(_on_progress)
+        worker.finished.connect(lambda p: (_stop(), QMessageBox.information(self, "Modell geladen", f"Fertig:\n{p}")))
+        worker.failed.connect(lambda m: (_stop(), None if m == "abgebrochen" else QMessageBox.warning(self, "Download fehlgeschlagen", m)))
+        worker.cancelled.connect(lambda: _stop())
+        progress.canceled.connect(worker.cancel)
+        progress.show()
         thread.start()
-        dlg.exec()
-        thread.quit()
-        thread.wait(3000)
-        self._refresh_usage()
 
     def _delete_model(self) -> None:
         model_path = Path(self.txt_model.text())
@@ -427,6 +457,9 @@ class SettingsDialog(QDialog):
         s.chunk_size = self.spin_chunk.value()
         s.ocr_enabled = self.chk_ocr.isChecked()
         s.ocr_backend = self.cmb_ocr_backend.currentData()
+        preset = MODEL_PRESETS[self.cmb_model.currentIndex()]
+        s.hf_repo = preset["repo"]
+        s.hf_filename = preset["filename"]
         s.glossary_path = self.txt_glossar.text().strip()
         s.output_dir = self.txt_output.text().strip()
         s.model_path = self.txt_model.text().strip()
@@ -622,6 +655,8 @@ class MainWindow(QMainWindow):
         self._update_worker.finished.connect(self._on_update_finished)
         self._update_worker.failed.connect(self._on_update_failed)
         self._update_progress.canceled.connect(self._update_worker.cancel)
+        self._update_progress.setMinimumDuration(0)
+        self._update_progress.show()
         self._update_thread.start()
 
     def _on_update_progress(self, done: int, total: int, speed: float) -> None:
@@ -632,6 +667,7 @@ class MainWindow(QMainWindow):
 
     def _on_update_finished(self, path: str) -> None:
         self._update_progress.reset()
+        self._update_progress.hide()
         self._update_thread.quit()
         self._update_thread.wait()
         from . import updater
@@ -647,6 +683,7 @@ class MainWindow(QMainWindow):
 
     def _on_update_failed(self, message: str) -> None:
         self._update_progress.reset()
+        self._update_progress.hide()
         self._update_thread.quit()
         self._update_thread.wait()
         if message != "abgebrochen":
@@ -766,9 +803,8 @@ class MainWindow(QMainWindow):
         self.progress.setValue(done)
 
     def _append_preview(self, text: str) -> None:
-        cursor = self.txt_preview.textCursor()
-        cursor.movePosition(cursor.End)
-        cursor.insertText(text)
+        self.txt_preview.moveCursor(QTextCursor.End)
+        self.txt_preview.insertPlainText(text)
         plain = self.txt_preview.toPlainText()
         if len(plain) > 4000:
             self.txt_preview.setPlainText(plain[-4000:])

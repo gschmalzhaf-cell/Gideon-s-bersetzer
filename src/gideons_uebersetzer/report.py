@@ -16,7 +16,7 @@ from pathlib import Path
 
 from . import __version__, model_manager
 from .cache import STATUS_DONE, STATUS_FAILED
-from .settings import Settings, cache_dir, models_dir
+from .settings import LEGACY_HF_FILENAMES, MODEL_PRESETS, Settings, cache_dir, models_dir, model_preset_index
 
 LOG_BUFFER: list[str] = []
 LOG_BUFFER_MAX = 500
@@ -96,6 +96,8 @@ def build_report(settings: Settings, log_lines: list[str] | None = None) -> str:
     md.append("")
     md.append(f"- HF-Repo/Datei: `{settings.hf_repo}/{settings.hf_filename}`")
     md.append(f"- Modellpfad: `{model_path}`")
+    md.append(f"- Preset: {MODEL_PRESETS[model_preset_index(settings.hf_repo, settings.hf_filename)]['id'] if model_preset_index(settings.hf_repo, settings.hf_filename) >= 0 else 'benutzerdefiniert'}"
+              + (" – ACHTUNG: älteres Legacy-Modell aktiv, für bessere Qualität aktuelles Preset laden" if model_path.name in LEGACY_HF_FILENAMES else ""))
     size = f" ({model_manager.format_bytes(model_manager.model_disk_usage(model_path))})" if present else ""
     md.append(f"- Lokal vorhanden: {'ja' if present else 'nein'}{size}")
     try:
@@ -143,7 +145,10 @@ def build_report(settings: Settings, log_lines: list[str] | None = None) -> str:
                     "filename": settings.hf_filename,
                     "path": str(model_path),
                     "present": present,
+                    "legacy_in_use": model_path.name in LEGACY_HF_FILENAMES,
+                    "preset": model_preset_index(settings.hf_repo, settings.hf_filename),
                 },
+                "model_presets": MODEL_PRESETS,
                 "caches": caches,
             },
             ensure_ascii=False,

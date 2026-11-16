@@ -22,6 +22,36 @@ LEGACY_HF_FILENAMES = (
     "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf",  # v1.1.2 und neuer (HF-Neuschema)
     "Mistral-7B-Instruct-v0.3.Q4_K_M.gguf",  # bis v1.1.1 (altes HF-Schema, 404 seit Umbenennung)
 )
+
+# Wählbare Modelle (Einstellungen). ids bleiben stabil; repo/filename sind HF-Download.
+MODEL_PRESETS = [
+    {
+        "id": "qwen2.5-7b",
+        "label": "Qwen2.5-7B-Instruct Q4_K_M (empfohlen, ca. 4,7 GB)",
+        "repo": "bartowski/Qwen2.5-7B-Instruct-GGUF",
+        "filename": "Qwen2.5-7B-Instruct-Q4_K_M.gguf",
+    },
+    {
+        "id": "translategemma-12b",
+        "label": "TranslateGemma-12B-IT Q4_K_M (spezialisiert auf Übersetzung, ca. 6,8 GB)",
+        "repo": "mradermacher/translategemma-12b-it-GGUF",
+        "filename": "translategemma-12b-it.Q4_K_M.gguf",
+    },
+    {
+        "id": "translategemma-4b",
+        "label": "TranslateGemma-4B-IT Q4_K_M (kompakt, ca. 2,3 GB)",
+        "repo": "mradermacher/translategemma-4b-it-GGUF",
+        "filename": "translategemma-4b-it.Q4_K_M.gguf",
+    },
+]
+
+
+def model_preset_index(repo: str, filename: str) -> int:
+    """Index des Presets zu repo/filename; -1 bei benutzerdefiniertem Modell."""
+    for i, p in enumerate(MODEL_PRESETS):
+        if p["repo"] == repo and p["filename"] == filename:
+            return i
+    return -1
 DEFAULT_CHUNK_WORDS = 1500
 DEFAULT_TEMPERATURE = 0.3
 

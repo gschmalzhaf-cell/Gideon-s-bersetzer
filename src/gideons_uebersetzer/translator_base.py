@@ -116,16 +116,26 @@ def load_glossary(path: str | Path | None) -> list[tuple[str, str]]:
     return entries
 
 
+def prompt_format_for(settings) -> str:
+    """"translategemma", wenn das gewählte Modell TranslateGemma ist (eigenes Prompt-Format)."""
+    haystack = f"{settings.hf_filename} {settings.model_path}".lower()
+    return "translategemma" if "translategemma" in haystack else "default"
+
+
 def build_messages(
     source_text: str,
     context_paragraphs: list[str],
     glossary: list[tuple[str, str]],
     extra_hint: str = "",
+    fmt: str = "default",
 ) -> list[dict]:
     """Baut die Chat-Nachrichten für einen Übersetzungsaufruf.
 
     context_paragraphs: die letzten 1–2 übersetzten Absätze als Stützkontext.
     glossary: Begriffs-Paare, die der Übersetzung vorgegeben werden.
+    fmt="translategemma": TranslateGemma erwartet KEINE System-Nachricht und ein
+    strukturiertes user-content [{type, source_lang_code, target_lang_code, text}]
+    (siehe Chat-Template des Modells); Glossar/Kontext/Hinweis landen im Textfeld.
     """
     parts: list[str] = []
     if glossary:
@@ -140,6 +150,21 @@ def build_messages(
     if extra_hint:
         parts.append(extra_hint)
     parts.append(f'Zu übersetzender Text:\n"""\n{source_text}\n"""')
+    if fmt == "translategemma":
+        body = "\n\n".join(parts)
+        return [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "source_lang_code": "en",
+                        "target_lang_code": "de",
+                        "text": body,
+                    }
+                ],
+            }
+        ]
     return [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": "\n\n".join(parts)},

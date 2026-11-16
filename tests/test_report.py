@@ -48,3 +48,22 @@ def test_log_buffer_is_capped():
         report.add_log_line(f"line {i}")
     assert len(report.LOG_BUFFER) == report.LOG_BUFFER_MAX
     assert report.LOG_BUFFER[-1] == f"line {report.LOG_BUFFER_MAX + 49}"
+
+
+def test_report_lists_model_presets_and_legacy_flag(tmp_path, monkeypatch):
+    import json
+
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    models = tmp_path / "Tolino-Uebersetzer" / "models"
+    models.mkdir(parents=True)
+    from gideons_uebersetzer import settings as settings_mod
+
+    (models / settings_mod.LEGACY_HF_FILENAMES[0]).write_bytes(b"x")
+    s = settings_mod.Settings(output_dir=str(tmp_path), hf_repo="bartowski/Mistral-7B-Instruct-v0.3-GGUF",
+                              hf_filename=settings_mod.LEGACY_HF_FILENAMES[0])
+    text = report.build_report(s)
+    assert "Legacy" in text or "legacy" in text
+    payload = text.split("## Maschinenlesbarer Anhang (JSON)")[1]
+    data = json.loads(payload.strip().strip("```json").strip("```").strip())
+    assert data["model"]["legacy_in_use"] is True
+    assert any(p["id"] == "translategemma-12b" for p in data["model_presets"])

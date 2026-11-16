@@ -23,6 +23,7 @@ from .translator_base import (
     Chunk,
     build_messages,
     load_glossary,
+    prompt_format_for,
     quality_check,
     sanitize_translation,
     split_into_chunks,
@@ -106,10 +107,11 @@ class TranslationPipeline:
         """Ein Chunk inkl. Qualitätsprüfung und Wiederholung. Liefert (Text, gesendete Zeichen)."""
         hint = ""
         last_problem = None
+        fmt = prompt_format_for(self.settings)
         for attempt in range(1 + MAX_RETRIES):
             if self._cancelled():
                 raise CancelledError("Übersetzung abgebrochen.")
-            messages = build_messages(chunk.text, context, self.glossary, extra_hint=hint)
+            messages = build_messages(chunk.text, context, self.glossary, extra_hint=hint, fmt=fmt)
             # Wiederholungen deterministisch (Temperatur 0), damit ein einmaliger
             # Aussetzer nicht dreimal reproduziert wird.
             temperature = self.settings.temperature if attempt == 0 else 0.0

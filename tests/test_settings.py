@@ -58,3 +58,13 @@ def test_effective_ocr_backend():
     assert s.effective_ocr_backend("offline", True) == "local"
     s2 = settings.Settings(ocr_backend="local")
     assert s2.effective_ocr_backend("api", True) == "local"
+
+
+def test_model_presets_default_is_first():
+    p = settings.MODEL_PRESETS[0]
+    assert p["repo"] == settings.DEFAULT_HF_REPO
+    assert p["filename"] == settings.DEFAULT_HF_FILENAME
+    assert settings.model_preset_index(p["repo"], p["filename"]) == 0
+    assert settings.model_preset_index("irgendwas/anders", "x.gguf") == -1
+    ids = [p["id"] for p in settings.MODEL_PRESETS]
+    assert "translategemma-12b" in ids and "translategemma-4b" in ids

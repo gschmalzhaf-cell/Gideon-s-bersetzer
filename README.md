@@ -3,8 +3,10 @@
 Windows-Anwendung, die englischsprachige PDF-Dokumente ins Deutsche übersetzt
 und daraus eine EPUB-Datei für den Tolino-E-Book-Reader erzeugt.
 
-- **Offline (Standard):** eingebettetes llama.cpp (llama-cpp-python) mit
-  Qwen2.5-7B-Instruct als GGUF (Q4_K_M, ca. 4,7 GB, 32k Kontext). Das Modell wird beim
+- **Offline (Standard):** eingebettetes llama.cpp (llama-cpp-python). Standardmodell ist
+  Qwen2.5-7B-Instruct als GGUF (Q4_K_M, ca. 4,7 GB, 32k Kontext); in den Einstellungen sind
+  auch **TranslateGemma-12B-IT** (spezialisiert auf Übersetzung, ca. 6,8 GB) und
+  TranslateGemma-4B-IT (ca. 2,3 GB) wählbar. Das Modell wird beim
   ersten Start einmalig heruntergeladen und liegt unter
   `%LOCALAPPDATA%\Tolino-Uebersetzer\models`. Danach läuft die Übersetzung
   vollständig lokal – kein Internet, kein API-Schlüssel.

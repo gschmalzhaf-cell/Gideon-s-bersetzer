@@ -26,6 +26,23 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.1.7 – 2026-11-16
+
+### Neu
+- **Modell-Auswahl (Presets) in den Einstellungen:** Qwen2.5-7B-Instruct (empfohlen, 4,7 GB),
+  **TranslateGemma-12B-IT** (spezialisiert auf Übersetzung, 6,8 GB) und TranslateGemma-4B-IT
+  (kompakt, 2,3 GB). „Modell laden“ lädt das gewählte Preset. TranslateGemma bekommt ein
+  eigenes Prompt-Format (kein System-Prompt, strukturiertes user-content en→de laut seinem
+  Chat-Template). Wird ein älteres Legacy-Modell erkannt, erscheint ein Hinweis in den
+  Einstellungen; der Report zeigt Preset + Legacy-Flag.
+
+### Behoben
+- **Modell-Download in den Einstellungen:** echter Fortschrittsbalken mit MB/s und
+  funktionierendem Abbrechen (QProgressDialog + Worker-Thread); wenn das gewählte Modell schon
+  lokal liegt, kommt sofort ein Hinweis statt eines leeren Dialogs.
+- **Live-Textprobe:** robusteres Anhängen der Token (Cursor ans Ende, insertPlainText) plus
+  GUI-Regressionstest.
+
 ## v1.1.6 – 2026-11-16
 
 ### Neu

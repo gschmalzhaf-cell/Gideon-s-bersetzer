@@ -96,3 +96,29 @@ def test_quality_check_passes_after_sanitize():
     good = "Der schnelle braune Fuchs springt über den faulen Hund. " * 5
     dirty = 'Translation:\n"""\n' + good + '\n"""'
     assert quality_check(src, sanitize_translation(dirty)) is None
+
+
+def test_build_messages_translategemma_format():
+    from gideons_uebersetzer.translator_base import build_messages
+
+    msgs = build_messages("Hello world.", ["Bisheriger Absatz."], [("London", "London")], fmt="translategemma")
+    assert len(msgs) == 1
+    assert msgs[0]["role"] == "user"
+    content = msgs[0]["content"]
+    assert isinstance(content, list) and len(content) == 1
+    item = content[0]
+    assert item["type"] == "text"
+    assert item["source_lang_code"] == "en"
+    assert item["target_lang_code"] == "de"
+    assert "Hello world." in item["text"]
+    assert "London = London" in item["text"]
+
+
+def test_prompt_format_for_detects_translategemma():
+    from gideons_uebersetzer import settings as settings_mod
+    from gideons_uebersetzer.translator_base import prompt_format_for
+
+    s = settings_mod.Settings(hf_filename="translategemma-12b-it.Q4_K_M.gguf")
+    assert prompt_format_for(s) == "translategemma"
+    s2 = settings_mod.Settings()
+    assert prompt_format_for(s2) == "default"
