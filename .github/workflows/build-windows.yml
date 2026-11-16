@@ -96,13 +96,15 @@ jobs:
             gh release create latest-build $setup --draft --title "Entwicklungs-Build (automatisch)" --notes $notes
           }
 
-  # Release nach jeder Änderung: Wenn CHANGELOG.md oben einen neuen, noch nicht
-  # getaggten Abschnitt "## vX.Y.Z" enthält, wird der Tag automatisch gepusht –
-  # dadurch startet der Tag-Build oben und veröffentlicht den Release mit den
-  # Release Notes aus genau diesem CHANGELOG-Abschnitt.
+  # Release nach jeder Änderung: Wenn CHANGELOG.md oben einen Abschnitt "## vX.Y.Z"
+  # enthält, für den es noch keinen Release gibt, wird hier (nach grünem Build) der
+  # Tag gesetzt und der Release direkt veröffentlicht – mit dem Installer aus dem
+  # Artefakt des Build-Jobs und den Release Notes aus genau diesem CHANGELOG-Abschnitt.
+  # (Hinweis: Ein Tag-Push mit GITHUB_TOKEN startet keine neuen Workflows – deshalb
+  # wird der Release hier direkt per gh CLI erstellt, nicht über den Tag-Trigger.)
   auto-release:
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -112,7 +114,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Neuen CHANGELOG-Abschnitt als Tag veröffentlichen
+      - name: Installer-Artefakt aus dem Build-Job laden
+        uses: actions/download-artifact@v6
+        with:
+          name: Tolino-Uebersetzer-Setup
+          path: artifact
+
+      - name: Version aus CHANGELOG bestimmen, taggen und Release veröffentlichen
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: bash
@@ -120,15 +128,24 @@ jobs:
           set -e
           version=$(grep -m1 -oE '^## v[0-9]+\.[0-9]+\.[0-9]+' CHANGELOG.md | head -1 | sed 's/^## //')
           if [ -z "$version" ]; then
-            echo "Kein neuer CHANGELOG-Abschnitt gefunden – kein Release."
+            echo "Kein CHANGELOG-Abschnitt gefunden – kein Release."
             exit 0
           fi
-          if git ls-remote --tags origin "$version" | grep -q "$version"; then
-            echo "Tag $version existiert bereits – Release wurde schon veröffentlicht."
+          if gh release view "$version" >/dev/null 2>&1; then
+            echo "Release $version existiert bereits – nichts zu tun."
             exit 0
           fi
+          setup=$(find artifact -name "Tolino-Uebersetzer-Setup.exe" | head -1)
+          if [ -z "$setup" ]; then
+            echo "::error::Installer-Artefakt nicht gefunden"
+            exit 1
+          fi
+          python3 packaging/extract_release_notes.py "$version" CHANGELOG.md release-notes.txt
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "$version" -m "Release $version (automatisch aus CHANGELOG.md)"
-          git push origin "$version"
-          echo "Tag $version gepusht – der Tag-Build veröffentlicht jetzt den Release."
+          if ! git ls-remote --tags origin "$version" | grep -q "$version"; then
+            git tag -a "$version" -m "Release $version (automatisch aus CHANGELOG.md)"
+            git push origin "$version"
+          fi
+          gh release create "$version" "$setup" --title "Gideon's Übersetzer $version" --notes-file release-notes.txt
+          echo "Release $version veröffentlicht."
