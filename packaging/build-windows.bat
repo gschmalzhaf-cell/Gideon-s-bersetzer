@@ -27,7 +27,9 @@ pyinstaller packaging\gideons_uebersetzer.spec --clean --noconfirm --distpath pa
 if errorlevel 1 goto :error
 
 REM Inno Setup: ISCC.exe liegt normalerweise unter "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
-"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=%VERSION%" packaging\installer.iss
+"C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=\"%VERSION%\"" packaging\installer.iss
+if errorlevel 1 goto :error
+ren "packaging\dist\Tolino-Uebersetzer-Setup.exe" "Tolino-Uebersetzer-Setup-%VERSION%.exe"
 if errorlevel 1 goto :error
 
 echo.
