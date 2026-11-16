@@ -3,13 +3,16 @@
 ; Build auf dem Windows-Rechner:
 ;   1. PyInstaller:  pyinstaller packaging\gideons_uebersetzer.spec --clean --noconfirm
 ;   2. Inno Setup 6: kompiliert packaging\installer.iss
-;      -> dist\Tolino-Uebersetzer-Setup.exe
+;      -> dist\Tolino-Uebersetzer-Setup-<Version>.exe
+;        (Version per ISCC /DMyAppVersion=<Version> uebergeben; ohne Angabe Fallback unten)
 ;
 ; Der Installer enthält NICHT das Übersetzungsmodell (ca. 4,4 GB): Die Anwendung
 ; lädt es beim ersten Start selbst herunter (Assistent, Offline-Weg an erster Stelle).
 
 #define MyAppName "Gideon's Übersetzer"
-#define MyAppVersion "1.0.0"
+#ifndef MyAppVersion
+#define MyAppVersion 1.1.2
+#endif
 #define MyAppPublisher "Gideon's Übersetzer"
 #define MyAppExeName "Gideons-Uebersetzer.exe"
 #define MyAppURL "https://github.com/gschmalzhaf-cell/Gideon-s-bersetzer"
@@ -25,7 +28,7 @@ AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\Gideons-Uebersetzer
 DefaultGroupName={#MyAppName}
 OutputDir=dist
-OutputBaseFilename=Tolino-Uebersetzer-Setup
+OutputBaseFilename=Tolino-Uebersetzer-Setup-{#MyAppVersion}
 SetupIconFile=
 Compression=lzma2/ultra64
 SolidCompression=yes

@@ -16,7 +16,8 @@ from pathlib import Path
 DEFAULT_API_ENDPOINT = "https://api.mistral.ai/v1/chat/completions"
 DEFAULT_API_MODEL = "mistral-small-latest"
 DEFAULT_HF_REPO = "bartowski/Mistral-7B-Instruct-v0.3-GGUF"
-DEFAULT_HF_FILENAME = "Mistral-7B-Instruct-v0.3.Q4_K_M.gguf"
+DEFAULT_HF_FILENAME = "Mistral-7B-Instruct-v0.3-Q4_K_M.gguf"
+LEGACY_HF_FILENAME = "Mistral-7B-Instruct-v0.3.Q4_K_M.gguf"
 DEFAULT_CHUNK_WORDS = 1500
 DEFAULT_TEMPERATURE = 0.3
 
@@ -54,7 +55,12 @@ def default_output_dir() -> Path:
 
 
 def default_model_path() -> Path:
-    return models_dir() / DEFAULT_HF_FILENAME
+    path = models_dir() / DEFAULT_HF_FILENAME
+    if not path.is_file():
+        legacy = models_dir() / LEGACY_HF_FILENAME
+        if legacy.is_file():
+            return legacy
+    return path
 
 
 @dataclass
@@ -95,13 +101,16 @@ class Settings:
 def load_settings(path: Path | None = None) -> Settings:
     """Lädt die Einstellungen; bei fehlender oder ungültiger Datei Standardwerte."""
     path = path or default_settings_path()
+    settings = Settings()
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict):
-            return Settings.from_dict(data)
+            settings = Settings.from_dict(data)
     except (OSError, ValueError):
         pass
-    return Settings()
+    if settings.hf_filename == LEGACY_HF_FILENAME and not (models_dir() / LEGACY_HF_FILENAME).is_file():
+        settings.hf_filename = DEFAULT_HF_FILENAME
+    return settings
 
 
 def save_settings(settings: Settings, path: Path | None = None) -> Path:

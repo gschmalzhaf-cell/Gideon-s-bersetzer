@@ -14,7 +14,8 @@ import sys
 from pathlib import Path
 
 FALLBACK = (
-    "Installer: Tolino-Uebersetzer-Setup.exe. Enthält NICHT das Übersetzungsmodell – "
+    "Installer: Tolino-Uebersetzer-Setup-<Version>.exe (Dateiname enthält die Release-Version). "
+    "Enthält NICHT das Übersetzungsmodell – "
     "die App lädt es beim ersten Start selbst (Assistent, Offline-Weg an erster Stelle). "
     "Details: README.md und packaging/README-de.txt im Repository.\n"
 )

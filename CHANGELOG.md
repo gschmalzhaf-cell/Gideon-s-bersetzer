@@ -26,6 +26,21 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.1.2 – 2026-11-16
+
+### Geändert
+- **Installer-Datei trägt die Versionsnummer:** `Tolino-Uebersetzer-Setup-<Version>.exe`
+  (z. B. `Tolino-Uebersetzer-Setup-1.1.2.exe`). Die Version kommt aus dem Tag `v*`
+  bzw. bei main-Builds aus dem obersten `## vX.Y.Z`-Abschnitt in CHANGELOG.md;
+  der lokale Build (`packaging/build-windows.bat`) liest dieselbe Version aus dem CHANGELOG.
+
+### Behoben
+- **Modell-Download schlug mit 404 fehl:** Hugging Face hat die GGUF-Dateien umbenannt
+  (neues Namensschema mit Bindestrich statt Punkt vor der Quantisierung). Standard-Datei
+  ist jetzt `Mistral-7B-Instruct-v0.3-Q4_K_M.gguf`. Eine bereits unter dem alten Namen
+  (`Mistral-7B-Instruct-v0.3.Q4_K_M.gguf`) vorhandene Datei wird weiterhin verwendet –
+  kein erneuter 4,4-GB-Download.
+
 ## v1.1.1 – 2026-11-15
 
 ### Behoben

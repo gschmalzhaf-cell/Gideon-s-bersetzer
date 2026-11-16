@@ -1,7 +1,7 @@
 name: Windows-Installer bauen
 
 # Baut bei jedem Push auf main (und bei Tags v*) den Installer
-# Tolino-Uebersetzer-Setup.exe auf einem windows-latest-Runner:
+# Tolino-Uebersetzer-Setup-<Version>.exe auf einem windows-latest-Runner:
 #   - Push auf main  -> Artefakt + aktualisierter DRAFT-Release "latest-build"
 #   - Tag v*.*       -> veröffentlichter Release mit dem Installer
 # Manuell startbar über "Run workflow".
@@ -22,6 +22,21 @@ jobs:
     steps:
       - name: Repo auschecken
         uses: actions/checkout@v6
+
+      - name: Versionsnummer ermitteln (Tag v* -> Tag; sonst oberster CHANGELOG-Abschnitt "## vX.Y.Z")
+        id: version
+        shell: pwsh
+        run: |
+          if ($env:GITHUB_REF.StartsWith("refs/tags/v")) {
+            $v = $env:GITHUB_REF_NAME.Substring(1)
+          } else {
+            $line = Get-Content CHANGELOG.md | Where-Object { $_ -match '^## v\d+\.\d+\.\d+' } | Select-Object -First 1
+            $v = "$line" -replace '^## v([\d.]+).*$', '$1'
+          }
+          if (-not $v) { Write-Error "Version konnte nicht ermittelt werden"; exit 1 }
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$v"
+          Add-Content -Path $env:GITHUB_ENV -Value "SETUP_FILE=Tolino-Uebersetzer-Setup-$v.exe"
+          Write-Host "Version $v -> Installer-Datei: Tolino-Uebersetzer-Setup-$v.exe"
 
       - name: Python 3.12 einrichten
         uses: actions/setup-python@v6
@@ -58,15 +73,17 @@ jobs:
       - name: Inno Setup 6 installieren
         run: choco install innosetup -y
 
-      - name: Installer kompilieren (packaging\dist\Tolino-Uebersetzer-Setup.exe)
+      - name: Installer kompilieren (packaging\dist\Tolino-Uebersetzer-Setup-<Version>.exe)
         shell: pwsh
-        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" packaging\installer.iss'
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=$($steps.version.outputs.version)" "packaging\installer.iss"
+          if (!(Test-Path "packaging\dist\$env:SETUP_FILE")) { Write-Error "Installer nicht gefunden: $env:SETUP_FILE"; exit 1 }
 
       - name: Artefakt bereitstellen (Download unter dem Job)
         uses: actions/upload-artifact@v6
         with:
           name: Tolino-Uebersetzer-Setup
-          path: packaging/dist/Tolino-Uebersetzer-Setup.exe
+          path: packaging/dist/${{ env.SETUP_FILE }}
           retention-days: 30
 
       - name: Release Notes aus CHANGELOG.md extrahieren (bei Tag v*)
@@ -79,7 +96,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          gh release create ${{ github.ref_name }} packaging/dist/Tolino-Uebersetzer-Setup.exe --title "Gideon's Übersetzer ${{ github.ref_name }}" --notes-file release-notes.txt
+          gh release create ${{ github.ref_name }} "packaging/dist/${{ env.SETUP_FILE }}" --title "Gideon's Übersetzer ${{ github.ref_name }}" --notes-file release-notes.txt
 
       - name: Draft-Release aktualisieren (bei Push auf main)
         if: github.ref == 'refs/heads/main'
@@ -87,7 +104,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         shell: pwsh
         run: |
-          $setup = "packaging/dist/Tolino-Uebersetzer-Setup.exe"
+          $setup = "packaging/dist/$env:SETUP_FILE"
           $notes = "Automatisch gebaut bei Push auf main. Installer ohne Modell; das Modell (ca. 4-5 GB) lädt die App beim ersten Start selbst. Nur für Tests – nicht das offizielle Release."
           if (gh release view latest-build 2>$null) {
             gh release upload latest-build $setup --clobber
@@ -135,7 +152,7 @@ jobs:
             echo "Release $version existiert bereits – nichts zu tun."
             exit 0
           fi
-          setup=$(find artifact -name "Tolino-Uebersetzer-Setup.exe" | head -1)
+          setup=$(find artifact -name "Tolino-Uebersetzer-Setup-*.exe" | head -1)
           if [ -z "$setup" ]; then
             echo "::error::Installer-Artefakt nicht gefunden"
             exit 1

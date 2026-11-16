@@ -28,7 +28,7 @@ und daraus eine EPUB-Datei für den Tolino-E-Book-Reader erzeugt.
   Einstellungen, Fortsetzen nach Unterbrechung.
 - **M4** – Härtung (Qualitätsprüfung, Wiederholungen, Abschluss-Zusammenfassung),
   PyInstaller-Build (eine .exe) und Inno-Setup-Installer
-  (`Tolino-Uebersetzer-Setup.exe`, ohne Modell, mit deutscher README).
+  (`Tolino-Uebersetzer-Setup-<Version>.exe`, ohne Modell, mit deutscher README).
 
 ## Entwicklung
 
@@ -58,7 +58,7 @@ python -m gideons_uebersetzer.app
 
 1. CUDA-Build von `llama-cpp-python` installieren (siehe requirements.txt).
 2. `pyinstaller packaging/gideons_uebersetzer.spec --distpath packaging/dist` → `packaging\dist\Gideons-Uebersetzer.exe`
-3. Inno Setup 6 mit `packaging/installer.iss` kompilieren → `packaging\dist\Tolino-Uebersetzer-Setup.exe`
+3. Inno Setup 6 mit `packaging/installer.iss` kompilieren → `packaging\dist\Tolino-Uebersetzer-Setup-<Version>.exe`
 
 oder lokal alles auf einmal: `packaging\build-windows.bat`
 

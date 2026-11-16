@@ -12,7 +12,7 @@ python -m venv .venv
 :: (siehe requirements.txt) – sonst läuft die App auf der CPU.
 pyinstaller packaging\gideons_uebersetzer.spec --clean --noconfirm --distpath packaging\dist
 :: Inno Setup 6 öffnen und packaging\installer.iss kompilieren
-:: -> packaging\dist\Tolino-Uebersetzer-Setup.exe
+:: -> packaging\dist\Tolino-Uebersetzer-Setup-<Version>.exe
 ```
 
 Alternativ lokal alles auf einmal: `packaging\build-windows.bat`.
@@ -25,7 +25,7 @@ Kontrolle: `packaging\dist\Gideons-Uebersetzer.exe` startet ohne Python auf dem 
 
 ## 2. 1-Klick-Beweis (Abnahmekriterium 3)
 
-1. Nur `Tolino-Uebersetzer-Setup.exe` ausführen, Standardwerte bestätigen.
+1. Nur `Tolino-Uebersetzer-Setup-<Version>.exe` ausführen, Standardwerte bestätigen.
 2. App starten → Erststart-Assistent erscheint.
 3. OFFLINE ist vorausgewählt (erste Stelle). Klick „Weiter“ (1. Klick),
    dann „Modell jetzt laden“ (2. Klick). Download läuft mit Fortschritt,
