@@ -37,6 +37,10 @@ hiddenimports = [
     "gideons_uebersetzer.cache",
     "gideons_uebersetzer.model_manager",
     "gideons_uebersetzer.settings",
+    "gideons_uebersetzer.document_reader",
+    "gideons_uebersetzer.mistral_ocr",
+    "gideons_uebersetzer.report",
+    "gideons_uebersetzer.updater",
     "huggingface_hub",
     "requests",
     "pymupdf",
@@ -46,7 +50,7 @@ hiddenimports = [
 
 # Native Bibliotheken und Datendateien einsammeln (gguf-Bibliothek, CUDA-DLLs,
 # pymupdf-DLLs, OCR: ONNX-Runtime + OpenCV + RapidOCR-Modelle)
-for pkg in ("llama_cpp", "pymupdf", "ebooklib", "huggingface_hub", "rapidocr_onnxruntime", "onnxruntime", "cv2"):
+for pkg in ("llama_cpp", "pymupdf", "ebooklib", "docx", "huggingface_hub", "rapidocr_onnxruntime", "onnxruntime", "cv2"):
     # Pro Collector einzeln absichern: collect_submodules importiert das Paket und kann
     # fehlschlagen, wenn dessen native lib auf dem Build-Rechner nicht laedt; die DLLs
     # (collect_dynamic_libs = reiner Dateiscan) duerfen dadurch nicht verloren gehen.

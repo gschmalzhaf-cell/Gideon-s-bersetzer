@@ -83,3 +83,14 @@ def test_settings_dialog_has_model_presets(qapp):
     assert dlg.cmb_model.count() >= 3
     assert dlg.cmb_model.currentData() == "qwen2.5-7b"
     dlg.close()
+
+
+def test_main_window_has_queue_list(qapp, tmp_path, monkeypatch):
+    monkeypatch.setattr("gideons_uebersetzer.settings.default_settings_path", lambda: tmp_path / "settings.json")
+    win = MainWindow(Settings(output_dir=str(tmp_path)))
+    assert win.list_files.count() == 0
+    win.list_files.addItem(str(tmp_path / "a.pdf"))
+    win.list_files.addItem(str(tmp_path / "b.epub"))
+    assert win.list_files.count() == 2
+    win._remove_selected.__self__  # Methode existiert
+    win.close()

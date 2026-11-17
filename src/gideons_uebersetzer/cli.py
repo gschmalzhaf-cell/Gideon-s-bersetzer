@@ -146,6 +146,9 @@ def _build_translator(args, settings):
 
 
 def _cmd_uebersetzen(args) -> int:
+    """Warteschlange: alle übergebenen Dokumente (PDF/EPUB/DOCX) nacheinander abarbeiten."""
+    from . import document_reader
+
     settings = settings_mod.load_settings()
     if args.output_dir:
         settings.output_dir = args.output_dir
@@ -168,72 +171,90 @@ def _cmd_uebersetzen(args) -> int:
               "lokales OCR wird verwendet.")
         ocr_backend = "local"
 
+    # Translator wird erst nach dem ersten erfolgreich gelesenen Dokument geladen und
+    # dann für die ganze Warteschlange wiederverwendet (sonst würde das 4-7-GB-Modell
+    # pro Dokument neu geladen). Dokument-Fehler haben Vorrang vor Modell-Fehlern.
+    translator = None
+    tool = args.tool or settings.tool
+
     def _extract_progress(page_nr: int, page_total: int, modus: str) -> None:
         if modus == "OCR":
             print(f"  Seite {page_nr}/{page_total}: OCR (gescannte Seite) …", flush=True)
 
+    documents = [Path(p) for p in args.pdf]
+    failures = 0
+    cancelled = False
     try:
-        book = pdf_reader.extract_book(
-            args.pdf,
-            ocr=ocr,
-            progress_cb=_extract_progress,
-            ocr_backend=ocr_backend,
-            api_key=args.api_key or settings.api_key,
-        )
-    except pdf_reader.PdfError as exc:
-        print(f"Fehler: {exc}")
-        return 1
-    print(f"PDF geladen: {book.title} – {book.page_count} Seiten, {book.word_count} Wörter, "
-          f"{len(book.chapters)} Kapitel erkannt.")
+        for i, doc_path in enumerate(documents, start=1):
+            print(f"\n=== Dokument {i}/{len(documents)}: {doc_path.name} ===", flush=True)
+            try:
+                book = document_reader.read_book(
+                    doc_path,
+                    ocr=ocr,
+                    progress_cb=_extract_progress,
+                    ocr_backend=ocr_backend,
+                    api_key=args.api_key or settings.api_key,
+                )
+            except pdf_reader.PdfError as exc:
+                print(f"Fehler: {exc}")
+                failures += 1
+                continue
+            if doc_path.suffix.lower() == ".pdf":
+                print(f"PDF geladen: {book.title} – {book.page_count} Seiten, {book.word_count} Wörter, "
+                      f"{len(book.chapters)} Kapitel erkannt.")
+            else:
+                print(f"Dokument geladen: {book.title} – {book.word_count} Wörter, "
+                      f"{len(book.chapters)} Kapitel erkannt.")
 
-    built = _build_translator(args, settings)
-    if built is None:
-        return 1
-    translator, tool = built
+            if translator is None:
+                built = _build_translator(args, settings)
+                if built is None:
+                    return 1
+                translator, tool = built
 
-    cache = TranslationCache.load(args.pdf)
-    if cache is not None and not args.no_resume:
-        answer = input("Es existiert ein Zwischenspeicher für dieses PDF. Übersetzung fortsetzen? [J/n] ")
-        if answer.strip().lower() not in ("", "j", "ja", "y", "yes"):
-            cache = None
-    if cache is None:
-        cache = TranslationCache(args.pdf, TranslationCache.cache_file_for(args.pdf), tool=tool)
+            cache = TranslationCache.load(doc_path)
+            if cache is not None and not args.no_resume:
+                answer = input(f"Es existiert ein Zwischenspeicher für {doc_path.name}. Übersetzung fortsetzen? [J/n] ")
+                if answer.strip().lower() not in ("", "j", "ja", "y", "yes"):
+                    cache = None
+            if cache is None:
+                cache = TranslationCache(doc_path, TranslationCache.cache_file_for(doc_path), tool=tool)
 
-    cover = None
-    if not args.no_cover:
-        cover = pdf_reader.extract_cover_png(args.pdf)
+            cover = None
+            if not args.no_cover and doc_path.suffix.lower() == ".pdf":
+                cover = pdf_reader.extract_cover_png(doc_path)
 
-    pipeline = TranslationPipeline(
-        book=book,
-        translator=translator,
-        settings=settings,
-        cache=cache,
-        listener=CliListener(),
-        cancel_event=threading.Event(),
-        glossary=load_glossary(settings.glossary_path),
-        cover_png=cover,
-    )
-    try:
-        result = pipeline.run()
-    except CancelledError:
-        print("Übersetzung abgebrochen. Zwischenspeicher wurde gesichert – Fortsetzen später möglich.")
-        return 130
-    except Exception as exc:
-        print(f"Fehler: {exc}")
-        return 1
+            pipeline = TranslationPipeline(
+                book=book,
+                translator=translator,
+                settings=settings,
+                cache=cache,
+                listener=CliListener(),
+                cancel_event=threading.Event(),
+                glossary=load_glossary(settings.glossary_path),
+                cover_png=cover,
+            )
+            try:
+                result = pipeline.run()
+            except CancelledError:
+                print("\nÜbersetzung abgebrochen. Zwischenspeicher wurde gesichert – Fortsetzen später möglich.")
+                cancelled = True
+                break
+            print(f"=== Zusammenfassung {doc_path.name} ===")
+            print(f"Wörter: {result.words}")
+            print(f"Abschnitte: {result.chunks_done} übersetzt, {result.chunks_failed} fehlgeschlagen (von {result.chunks_total})")
+            print(f"Dauer: {_fmt_duration(result.duration_seconds)}")
+            if tool == "api":
+                print(f"An Mistral gesendete Zeichen: {result.chars_sent}")
+            print(f"Ausgabedatei: {result.output_path}")
     finally:
-        if hasattr(translator, "close"):
+        if translator is not None and hasattr(translator, "close"):
             translator.close()
 
-    print("\n=== Zusammenfassung ===")
-    print(f"Seiten: {result.pages}")
-    print(f"Wörter: {result.words}")
-    print(f"Abschnitte: {result.chunks_done} übersetzt, {result.chunks_failed} fehlgeschlagen (von {result.chunks_total})")
-    print(f"Dauer: {_fmt_duration(result.duration_seconds)}")
-    if tool == "api":
-        print(f"An Mistral gesendete Zeichen: {result.chars_sent}")
-    print(f"Ausgabedatei: {result.output_path}")
-    return 0
+    if cancelled:
+        return 130
+    print(f"\n=== Warteschlange fertig: {len(documents) - failures}/{len(documents)} erfolgreich ===")
+    return 0 if failures == 0 else 1
 
 
 def _cmd_update(args) -> int:
@@ -295,7 +316,7 @@ def main(argv: list[str] | None = None) -> int:
     p_model.set_defaults(func=_cmd_modell)
 
     p_tr = sub.add_parser("uebersetzen", help="PDF übersetzen und EPUB erzeugen")
-    p_tr.add_argument("pdf", help="Pfad zum englischen PDF")
+    p_tr.add_argument("pdf", nargs="+", metavar="dokument", help="ein oder mehrere englische Dokumente (PDF/EPUB/DOCX) – Warteschlange, nacheinander abgearbeitet")
     p_tr.add_argument("--tool", choices=["offline", "api"], default=None, help="Werkzeug (Standard: aus Einstellungen)")
     p_tr.add_argument("--online", action="store_true", help="Bestätigt den bewussten Online-Betrieb (Mistral-API)")
     p_tr.add_argument("--api-key", default=None, help="Mistral-API-Schlüssel (sonst aus settings.json)")

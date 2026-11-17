@@ -26,6 +26,20 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.2.0 – 2026-11-16
+
+### Neu
+- **Warteschlange (mehrere Dokumente nacheinander):** GUI: Liste mit „Hinzufügen …“ /
+  „Entfernen“ / „Leeren“, Drag & Drop nimmt mehrere Dateien; Start arbeitet die Liste
+  sequenziell ab (einmalig geladenes Modell wird für alle Dokumente wiederverwendet,
+  Fehler bei einem Dokument brechen die Schlange nicht ab, am Ende Sammel-Übersicht).
+  CLI: `uebersetzen buch1.pdf buch2.epub buch3.docx …` (positional nargs="+"), pro Dokument
+  eigene Zusammenfassung, Exitcode 1 wenn eines fehlschlägt.
+- **EPUB und DOCX als Eingabeformate** (schließt #1): neuer `document_reader.py` liest
+  EPUB (ebooklib, Spine-Reihenfolge, h1–h4 als Kapitel) und DOCX (python-docx, Heading-Stile
+  als Kapitel) in dieselbe Kapitel/Absatz-Struktur wie PDFs. Dateidialog und Drag & Drop
+  akzeptieren `*.pdf *.epub *.docx`.
+
 ## v1.1.7 – 2026-11-16
 
 ### Neu

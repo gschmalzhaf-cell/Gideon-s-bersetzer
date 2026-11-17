@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
+    QListWidget,
     QProgressBar,
     QProgressDialog,
     QPushButton,
@@ -59,7 +60,7 @@ def fmt_duration(seconds: float) -> str:
 
 
 class _Worker(QThread):
-    """Führt Extraktion + Übersetzung im Hintergrund aus."""
+    """Führt Extraktion + Übersetzung der Warteschlange im Hintergrund aus (ein Translator für alle Dokumente)."""
 
     log = Signal(str)
     status = Signal(str)
@@ -67,90 +68,112 @@ class _Worker(QThread):
     page_info = Signal(int)
     eta = Signal(float)
     preview = Signal(str)
-    finished = Signal(object)
+    finished = Signal(object)  # list[dict]: {path, ok, result, error}
     failed = Signal(str)
     cancelled = Signal()
 
-    def __init__(self, pdf_path: Path, settings: Settings, cache: TranslationCache, output_path: Path | None, parent=None):
+    def __init__(self, paths, settings: Settings, parent=None, resume: bool = True):
         super().__init__(parent)
-        self.pdf_path = Path(pdf_path)
+        self.paths = [Path(p) for p in paths]
         self.settings = settings
-        self.cache = cache
-        self.output_path = output_path
+        self.resume = resume
         self.cancel_event = threading.Event()
         self._translator = None
 
     def cancel(self) -> None:
         self.cancel_event.set()
 
+    def _make_translator(self):
+        if self.settings.tool == "api":
+            if not self.settings.online_enabled:
+                raise RuntimeError(
+                    "Der Online-Betrieb ist ausgeschaltet. Bitte in den Einstellungen bewusst einschalten "
+                    "(dann wird der Buchtext an Mistral übertragen) oder den Offline-Modus wählen."
+                )
+            from .translator_api import ApiTranslator
+
+            return ApiTranslator(
+                self.settings.api_key, self.settings.api_model, self.settings.api_endpoint, self.settings.temperature
+            )
+        from .translator_local import LocalTranslator
+
+        return LocalTranslator(self.settings.resolved_model_path())
+
     def run(self) -> None:
+        from . import document_reader
+
         try:
-            def _extract_progress(page_nr: int, page_total: int, modus: str) -> None:
-                if modus == "OCR":
-                    self.log.emit(f"Seite {page_nr}/{page_total}: OCR (gescannte Seite) …")
+            try:
+                self._translator = self._make_translator()
+            except FileNotFoundError as exc:
+                self.failed.emit(f"{exc}\nTipp: Modell laden über Einstellungen → „Modell laden“.")
+                return
+            except Exception as exc:
+                self.failed.emit(str(exc))
+                return
+            if getattr(self._translator, "gpu_warning", None):
+                self.log.emit(f"Warnung: {self._translator.gpu_warning}")
 
             ocr_backend = self.settings.effective_ocr_backend(self.settings.tool, self.settings.online_enabled)
             if self.settings.ocr_backend == "mistral" and ocr_backend != "mistral":
                 self.log.emit("Hinweis: Mistral OCR ist nur im Online-Betrieb verfügbar – lokales OCR wird verwendet.")
-            book = pdf_reader.extract_book(
-                self.pdf_path,
-                ocr=self.settings.ocr_enabled,
-                progress_cb=_extract_progress,
-                ocr_backend=ocr_backend,
-                api_key=self.settings.api_key,
-            )
-            self.log.emit(
-                f"PDF geladen: {book.title} – {book.page_count} Seiten, {book.word_count} Wörter, "
-                f"{len(book.chapters)} Kapitel erkannt."
-            )
-            if self.settings.tool == "api":
-                if not self.settings.online_enabled:
-                    self.failed.emit(
-                        "Der Online-Betrieb ist ausgeschaltet. Bitte in den Einstellungen bewusst "
-                        "einschalten (dann wird der Buchtext an Mistral übertragen) oder den Offline-Modus wählen."
-                    )
-                    return
-                from .translator_api import ApiError, ApiTranslator
+
+            results = []
+            total = len(self.paths)
+            for i, doc_path in enumerate(self.paths, start=1):
+                if self.cancel_event.is_set():
+                    break
+                self.status.emit(f"Dokument {i}/{total}: {doc_path.name}")
+                self.log.emit(f"=== Dokument {i}/{total}: {doc_path.name} ===")
+
+                def _extract_progress(page_nr, page_total, modus, _p=doc_path):
+                    if modus == "OCR":
+                        self.log.emit(f"{_p.name} – Seite {page_nr}/{page_total}: OCR (gescannte Seite) …")
 
                 try:
-                    self._translator = ApiTranslator(
-                        self.settings.api_key,
-                        self.settings.api_model,
-                        self.settings.api_endpoint,
-                        self.settings.temperature,
+                    book = document_reader.read_book(
+                        doc_path,
+                        ocr=self.settings.ocr_enabled,
+                        progress_cb=_extract_progress,
+                        ocr_backend=ocr_backend,
+                        api_key=self.settings.api_key,
                     )
-                except ApiError as exc:
-                    self.failed.emit(str(exc))
-                    return
-            else:
-                from .translator_local import LocalTranslator
-
-                try:
-                    self._translator = LocalTranslator(self.settings.resolved_model_path())
-                except FileNotFoundError as exc:
-                    self.failed.emit(f"{exc}\nTipp: Modell laden über Einstellungen → „Modell laden“.")
-                    return
-                if self._translator.gpu_warning:
-                    self.log.emit(f"Warnung: {self._translator.gpu_warning}")
-
-            listener = _GuiListener(self)
-            pipeline = TranslationPipeline(
-                book=book,
-                translator=self._translator,
-                settings=self.settings,
-                cache=self.cache,
-                listener=listener,
-                cancel_event=self.cancel_event,
-                glossary=load_glossary(self.settings.glossary_path),
-                output_path=self.output_path,
-                cover_png=pdf_reader.extract_cover_png(self.pdf_path),
-            )
-            result = pipeline.run()
-            self.finished.emit(result)
+                    if doc_path.suffix.lower() == ".pdf":
+                        self.log.emit(
+                            f"PDF geladen: {book.title} – {book.page_count} Seiten, {book.word_count} Wörter, "
+                            f"{len(book.chapters)} Kapitel erkannt."
+                        )
+                    else:
+                        self.log.emit(
+                            f"Dokument geladen: {book.title} – {book.word_count} Wörter, {len(book.chapters)} Kapitel erkannt."
+                        )
+                    cache = TranslationCache.load(doc_path) if self.resume else None
+                    if cache is not None:
+                        self.log.emit(f"Zwischenspeicher für „{doc_path.name}“ gefunden – wird fortgesetzt.")
+                    else:
+                        cache = TranslationCache(doc_path, TranslationCache.cache_file_for(doc_path), tool=self.settings.tool)
+                    cover = pdf_reader.extract_cover_png(doc_path) if doc_path.suffix.lower() == ".pdf" else None
+                    pipeline = TranslationPipeline(
+                        book=book,
+                        translator=self._translator,
+                        settings=self.settings,
+                        cache=cache,
+                        listener=_GuiListener(self),
+                        cancel_event=self.cancel_event,
+                        glossary=load_glossary(self.settings.glossary_path),
+                        cover_png=cover,
+                    )
+                    result = pipeline.run()
+                    results.append({"path": doc_path, "ok": True, "result": result, "error": None})
+                    self.log.emit(f"EPUB geschrieben: {result.output_path}")
+                except CancelledError:
+                    raise
+                except Exception as exc:
+                    self.log.emit(f"Fehler bei {doc_path.name}: {exc}")
+                    results.append({"path": doc_path, "ok": False, "result": None, "error": str(exc)})
+            self.finished.emit(results)
         except CancelledError:
             self.cancelled.emit()
-        except pdf_reader.PdfError as exc:
-            self.failed.emit(str(exc))
         except Exception as exc:
             self.failed.emit(f"Unerwarteter Fehler: {exc}")
         finally:
@@ -516,16 +539,23 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
 
-        # PDF-Auswahl
-        pdf_row = QHBoxLayout()
-        self.txt_pdf = QLineEdit()
-        self.txt_pdf.setPlaceholderText("Englisches PDF hierher ziehen oder wählen …")
-        self.txt_pdf.setReadOnly(True)
-        btn_browse = QPushButton("PDF wählen …")
-        btn_browse.clicked.connect(self._browse_pdf)
-        pdf_row.addWidget(self.txt_pdf)
-        pdf_row.addWidget(btn_browse)
-        layout.addLayout(pdf_row)
+        # Warteschlange: Dokumente (PDF/EPUB/DOCX), werden in dieser Reihenfolge abgearbeitet
+        self.list_files = QListWidget()
+        self.list_files.setToolTip("Dokumente in dieser Reihenfolge zur Warteschlange hinzufügen")
+        queue_btns = QVBoxLayout()
+        btn_add = QPushButton("Hinzufügen …")
+        btn_add.clicked.connect(self._add_files)
+        btn_remove = QPushButton("Entfernen")
+        btn_remove.clicked.connect(self._remove_selected)
+        btn_clear = QPushButton("Leeren")
+        btn_clear.clicked.connect(self.list_files.clear)
+        for b in (btn_add, btn_remove, btn_clear):
+            queue_btns.addWidget(b)
+        queue_btns.addStretch(1)
+        queue_row = QHBoxLayout()
+        queue_row.addWidget(self.list_files, 1)
+        queue_row.addLayout(queue_btns)
+        layout.addLayout(queue_row)
 
         # Werkzeug + Einstellungen
         tool_row = QHBoxLayout()
@@ -701,10 +731,18 @@ class MainWindow(QMainWindow):
 
     # --- Datei-Dialoge / Drag & Drop ---
 
-    def _browse_pdf(self) -> None:
-        path, _ = QFileDialog.getOpenFileName(self, "Englisches PDF wählen", "", "PDF-Dateien (*.pdf);;Alle Dateien (*)")
-        if path:
-            self.txt_pdf.setText(path)
+    def _add_files(self) -> None:
+        paths, _ = QFileDialog.getOpenFileNames(
+            self, "Englische Dokumente zur Warteschlange hinzufügen", "",
+            "Dokumente (*.pdf *.epub *.docx);;Alle Dateien (*)",
+        )
+        for p in paths:
+            if not self.list_files.findItems(p, Qt.MatchFlag.MatchExactly):
+                self.list_files.addItem(p)
+
+    def _remove_selected(self) -> None:
+        for item in self.list_files.selectedItems():
+            self.list_files.takeItem(self.list_files.row(item))
 
     def _pick_file(self, edit: QLineEdit, title: str, filt: str) -> None:
         path, _ = QFileDialog.getOpenFileName(self, title, "", filt)
@@ -717,16 +755,21 @@ class MainWindow(QMainWindow):
             edit.setText(path)
 
     def dragEnterEvent(self, event) -> None:
-        if event.mimeData().hasUrls() and any(u.toLocalFile().lower().endswith(".pdf") for u in event.mimeData().urls()):
+        if event.mimeData().hasUrls() and any(
+            u.toLocalFile().lower().endswith((".pdf", ".epub", ".docx")) for u in event.mimeData().urls()
+        ):
             event.acceptProposedAction()
 
     def dropEvent(self, event) -> None:
+        added = False
         for url in event.mimeData().urls():
             local = url.toLocalFile()
-            if local.lower().endswith(".pdf"):
-                self.txt_pdf.setText(local)
-                event.acceptProposedAction()
-                return
+            if local.lower().endswith((".pdf", ".epub", ".docx")):
+                if not self.list_files.findItems(local, Qt.MatchFlag.MatchExactly):
+                    self.list_files.addItem(local)
+                added = True
+        if added:
+            event.acceptProposedAction()
 
     # --- Einstellungen ---
 
@@ -740,9 +783,10 @@ class MainWindow(QMainWindow):
     # --- Übersetzung starten / abbrechen ---
 
     def _start(self) -> None:
-        pdf_path = Path(self.txt_pdf.text().strip())
-        if not pdf_path.is_file():
-            QMessageBox.warning(self, "Kein PDF gewählt", "Bitte zuerst ein englisches PDF auswählen oder hierher ziehen.")
+        paths = [Path(self.list_files.item(i).text()) for i in range(self.list_files.count())]
+        paths = [p for p in paths if p.is_file()]
+        if not paths:
+            QMessageBox.warning(self, "Keine Dokumente", "Bitte zuerst englische Dokumente (PDF/EPUB/DOCX) zur Warteschlange hinzufügen.")
             return
         if self.settings.tool == "offline" and not model_manager.is_model_present(self.settings.resolved_model_path()):
             answer = QMessageBox.question(
@@ -765,28 +809,25 @@ class MainWindow(QMainWindow):
         self.settings.output_dir = self.txt_output.text().strip()
         save_settings(self.settings)
 
-        cache = TranslationCache.load(pdf_path)
-        if cache is not None:
+        resume = True
+        existing = [p for p in paths if TranslationCache.load(p) is not None]
+        if existing:
             answer = QMessageBox.question(
                 self, "Übersetzung fortsetzen?",
-                f"Für „{pdf_path.name}“ existiert ein Zwischenspeicher mit {cache.done_count} bereits "
-                f"übersetzten Abschnitten.\n\nSoll die Übersetzung fortgesetzt werden?",
+                f"Für {len(existing)} Dokument(e) existiert ein Zwischenspeicher mit bereits übersetzten Abschnitten.\n\n"
+                "Soll fortgesetzt werden?",
                 QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes,
             )
-            if answer != QMessageBox.Yes:
-                cache = TranslationCache(pdf_path, TranslationCache.cache_file_for(pdf_path), tool=self.settings.tool)
-        else:
-            cache = TranslationCache(pdf_path, TranslationCache.cache_file_for(pdf_path), tool=self.settings.tool)
+            resume = answer == QMessageBox.Yes
 
-        output_path = None
         self.txt_preview.clear()
         self.txt_log.clear()
         self.progress.setValue(0)
         self.btn_start.setEnabled(False)
         self.btn_cancel.setEnabled(True)
-        self.lbl_status.setText("PDF wird gelesen …")
+        self.lbl_status.setText(f"Warteschlange: {len(paths)} Dokument(e) …")
 
-        self._worker = _Worker(pdf_path, self.settings, cache, output_path, self)
+        self._worker = _Worker(paths, self.settings, self, resume=resume)
         w = self._worker
         w.log.connect(self._on_worker_log)
         w.status.connect(self.lbl_status.setText)
@@ -815,14 +856,29 @@ class MainWindow(QMainWindow):
             self.lbl_status.setText("Abbruch wird wirksam …")
             self._worker.cancel()
 
-    def _on_finished(self, result) -> None:
+    def _on_finished(self, results) -> None:
         self.btn_start.setEnabled(True)
         self.btn_cancel.setEnabled(False)
         self.lbl_eta.setText("")
-        self.lbl_status.setText("Fertig.")
-        self.txt_log.appendPlainText("EPUB geschrieben: " + str(result.output_path))
-        dlg = SummaryDialog(result, self.settings.tool, self)
-        dlg.exec()
+        ok = [r for r in results if r["ok"]]
+        failed = [r for r in results if not r["ok"]]
+        self.lbl_status.setText(f"Fertig: {len(ok)}/{len(results)} erfolgreich.")
+        if len(results) == 1 and ok:
+            result = ok[0]["result"]
+            self.txt_log.appendPlainText("EPUB geschrieben: " + str(result.output_path))
+            dlg = SummaryDialog(result, self.settings.tool, self)
+            dlg.exec()
+            return
+        lines = []
+        for r in results:
+            if r["ok"]:
+                lines.append(f"OK: {r['path'].name} → {r['result'].output_path.name}")
+            else:
+                lines.append(f"FEHLER: {r['path'].name} – {r['error']}")
+        QMessageBox.information(
+            self, "Warteschlange fertig",
+            f"{len(ok)}/{len(results)} erfolgreich, {len(failed)} fehlgeschlagen.\n\n" + "\n".join(lines),
+        )
 
     def _on_failed(self, message: str) -> None:
         self.btn_start.setEnabled(True)

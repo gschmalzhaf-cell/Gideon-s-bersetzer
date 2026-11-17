@@ -1,7 +1,9 @@
 # Gideon's Übersetzer
 
-Windows-Anwendung, die englischsprachige PDF-Dokumente ins Deutsche übersetzt
-und daraus eine EPUB-Datei für den Tolino-E-Book-Reader erzeugt.
+Windows-Anwendung, die englischsprachige Dokumente (**PDF, EPUB, DOCX**) ins Deutsche
+übersetzt und daraus eine EPUB-Datei für den Tolino-E-Book-Reader erzeugt. Mehrere
+Dokumente können als Warteschlange nacheinander abgearbeitet werden (GUI: Liste +
+„Hinzufügen …“; CLI: mehrere Dateien als Argumente).
 
 - **Offline (Standard):** eingebettetes llama.cpp (llama-cpp-python). Standardmodell ist
   Qwen2.5-7B-Instruct als GGUF (Q4_K_M, ca. 4,7 GB, 32k Kontext); in den Einstellungen sind
@@ -50,6 +52,7 @@ python -m gideons_uebersetzer modell laden                          # Offline-Mo
 python -m gideons_uebersetzer modell info                           # Modell/Speicher anzeigen
 python -m gideons_uebersetzer modell loeschen                       # Modell löschen
 python -m gideons_uebersetzer uebersetzen buch.pdf                  # offline übersetzen
+python -m gideons_uebersetzer uebersetzen a.pdf b.epub c.docx       # Warteschlange: nacheinander
 python -m gideons_uebersetzer uebersetzen buch.pdf --tool api --online --api-key ...
 python -m gideons_uebersetzer report                 # Diagnose-Report (Markdown + JSON) speichern
 python -m gideons_uebersetzer update --check         # nach neuerer Version auf GitHub suchen
