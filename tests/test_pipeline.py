@@ -185,3 +185,22 @@ def test_pipeline_uses_translategemma_prompt_format(tmp_path, sample_pdf):
     result = pipe.run()
     assert result.chunks_failed == 0
     assert seen and all(m[0]["role"] == "user" and isinstance(m[0]["content"], list) for m in seen)
+
+
+def test_pipeline_api_mode_uses_plain_string_content(tmp_path, sample_pdf):
+    seen = []
+
+    class InspectTranslator:
+        def translate_stream(self, messages, temperature, on_token=None, cancel_event=None):
+            seen.append(messages)
+            return ("Deutscher Text für den Abschnitt. " * 20)[:400], 0
+
+    s = settings_mod.Settings(tool="api", chunk_size=40, output_dir=str(tmp_path), hf_filename="translategemma-12b-it.Q4_K_M.gguf")
+    book = pdf_reader.extract_book(sample_pdf)
+    cache = TranslationCache(sample_pdf, TranslationCache.cache_file_for(sample_pdf, tmp_path))
+    pipe = TranslationPipeline(book=book, translator=InspectTranslator(), settings=s, cache=cache,
+                               listener=PipelineListener(), cancel_event=threading.Event())
+    result = pipe.run()
+    assert result.chunks_failed == 0
+    assert seen and all(len(m) == 2 and m[0]["role"] == "system" for m in seen)
+    assert all(isinstance(m[1]["content"], str) for m in seen)

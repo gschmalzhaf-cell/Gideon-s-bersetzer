@@ -38,8 +38,32 @@ def test_ci_kein_cuda_wheel_im_release_build_und_bundle_check():
     wf = (ROOT / ".github" / "workflows" / "build-windows.yml").read_text(encoding="utf-8")
     assert "abetlen.github.io" not in wf
     assert "llama_supports_gpu_offload" in wf
-    assert "CArchiveReader" in wf
-    assert "llama.dll" in wf
+    assert "check_bundle.py" in wf
+    check = (ROOT / "packaging" / "check_bundle.py").read_text(encoding="utf-8")
+    assert "CArchiveReader" in check
+    assert "llama.dll" in check and "ggml" in check
+    assert "python312.dll" in check and "vcruntime140.dll" in check
+
+
+def test_spec_buendelt_vc_runtime_dlls_explizit():
+    spec = (ROOT / "packaging" / "gideons_uebersetzer.spec").read_text(encoding="utf-8")
+    assert "vcruntime140" in spec and "msvcp140" in spec
+    assert "sys.base_prefix" in spec
+
+
+def test_check_bundle_import_pruefung():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("check_bundle", ROOT / "packaging" / "check_bundle.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    assert mod.is_os_provided("api-ms-win-crt-runtime-l1-1-0.dll")
+    assert mod.is_os_provided("ext-ms-win-rtcore-ntuser-window-ext-l1-1-0.dll")
+    assert mod.is_os_provided("ucrtbase.dll")
+    assert not mod.is_os_provided("vcruntime140.dll")
+    assert mod.unsatisfied_imports(["VCRUNTIME140.dll", "KERNEL32.dll", "api-ms-win-core-x.dll"],
+                                   ["python312.dll", "vcruntime140.dll"]) == []
+    assert mod.unsatisfied_imports(["SOMETHING.dll"], ["python312.dll"]) == ["SOMETHING.dll"]
 
 
 def test_changelog_oberster_abschnitt_ist_semver():

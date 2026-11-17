@@ -26,6 +26,24 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.2.1 – 2026-11-17
+
+### Behoben
+- **Übersetzen im Mistral-API-Modus schlug mit HTTP 422 fehl:** Bei gewähltem
+  TranslateGemma-Preset wurde das strukturierte Prompt-Format (user-content als Liste mit
+  `source_lang_code`/`target_lang_code`) auch an die Mistral-API geschickt, die nur
+  String-Content akzeptiert – jeder Abschnitt endete mit „Input should be a valid
+  string“. Das TranslateGemma-Format wird jetzt nur noch im Offline-Betrieb (lokal via
+  llama.cpp, Chat-Template des GGUF) verwendet; im API-Betrieb immer das Standard-Format.
+- **Start der EXE auf Rechnern ohne installiertes VC++-Redist abgesichert:** `python312.dll`
+  hängt an `vcruntime140.dll` (Startfehler „Failed to load Python DLL … LoadLibrary: Das
+  angegebene Modul wurde nicht gefunden“). Die VC-Runtime-DLLs werden jetzt explizit in
+  die EXE gebündelt, und ein neuer CI-Schritt (`packaging/check_bundle.py`, läuft auch im
+  lokalen `build-windows.bat`) prüft, dass `python312.dll` + `vcruntime140.dll` im Bundle
+  liegen und dass jede von `python312.dll` importierte DLL im Bundle oder eine
+  Windows-System-DLL ist – sonst schlägt der Build fehl (der Smoke-Test allein merkt das
+  nicht, weil der CI-Runner das Redist installiert hat).
+
 ## v1.2.0 – 2026-11-16
 
 ### Neu

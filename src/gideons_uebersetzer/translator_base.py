@@ -117,7 +117,16 @@ def load_glossary(path: str | Path | None) -> list[tuple[str, str]]:
 
 
 def prompt_format_for(settings) -> str:
-    """"translategemma", wenn das gewählte Modell TranslateGemma ist (eigenes Prompt-Format)."""
+    """"translategemma", wenn das gewählte Modell TranslateGemma ist (eigenes Prompt-Format).
+
+    Nur im Offline-Betrieb (tool="offline"): llama.cpp wendet das Chat-Template des
+    GGUF-Modells an und TranslateGemma erwartet das strukturierte user-content
+    (Liste mit source_lang_code/target_lang_code). Im API-Betrieb (Mistral) muss
+    content dagegen ein einfacher String sein – das strukturierte Format wird mit
+    HTTP 422 abgelehnt ("Input should be a valid string").
+    """
+    if getattr(settings, "tool", "offline") != "offline":
+        return "default"
     haystack = f"{settings.hf_filename} {settings.model_path}".lower()
     return "translategemma" if "translategemma" in haystack else "default"
 

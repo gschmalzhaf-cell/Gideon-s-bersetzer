@@ -1,6 +1,6 @@
 [project]
 name = "gideons-uebersetzer"
-version = "1.2.0"
+version = "1.2.1"
 description = "Englische PDFs lokal ins Deutsche übersetzen und als EPUB für den Tolino ausgeben"
 requires-python = ">=3.12"
 

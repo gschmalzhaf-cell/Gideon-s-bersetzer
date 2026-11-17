@@ -67,6 +67,18 @@ for pkg in ("llama_cpp", "pymupdf", "ebooklib", "docx", "huggingface_hub", "rapi
     except Exception:
         pass
 
+# VC++-Runtime explizit bündeln: python312.dll hängt an vcruntime140.dll. Ohne
+# installiertes VC-Redist auf dem Zielrechner startet die EXE sonst nicht
+# ("Failed to load Python DLL ... LoadLibrary: Das angegebene Modul wurde nicht gefunden").
+# Die DLLs liegen beim python.org-Layout im Stammverzeichnis der Python-Installation.
+import glob
+import sys
+
+for _dir in {sys.base_prefix, os.path.dirname(sys.executable)}:
+    for _pat in ("vcruntime140*.dll", "msvcp140*.dll", "vccorlib140*.dll", "vcomp140*.dll", "concrt140.dll"):
+        for _p in glob.glob(os.path.join(_dir, _pat)):
+            binaries.append((_p, "."))
+
 a = Analysis(
     [os.path.join(SPEC_DIR, "entry.py")],  # dünner Einstiegspunkt mit absolutem Import (siehe entry.py)
     pathex=[os.path.join(SPEC_DIR, "..", "src")],

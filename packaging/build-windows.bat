@@ -26,6 +26,10 @@ REM distpath muss packaging\dist sein, damit installer.iss die EXE findet
 pyinstaller packaging\gideons_uebersetzer.spec --clean --noconfirm --distpath packaging\dist --workpath build\pyinstaller
 if errorlevel 1 goto :error
 
+REM Bundle pruefen (llama.dll, python312.dll, VC-Runtime, Importe)
+python packaging\check_bundle.py packaging\dist\Gideons-Uebersetzer.exe
+if errorlevel 1 goto :error
+
 REM Inno Setup: ISCC.exe liegt normalerweise unter "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
 "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/DMyAppVersion=\"%VERSION%\"" packaging\installer.iss
 if errorlevel 1 goto :error

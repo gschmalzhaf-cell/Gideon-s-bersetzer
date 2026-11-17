@@ -122,3 +122,6 @@ def test_prompt_format_for_detects_translategemma():
     assert prompt_format_for(s) == "translategemma"
     s2 = settings_mod.Settings()
     assert prompt_format_for(s2) == "default"
+    # API-Betrieb: strukturiertes TranslateGemma-Content ist dort unzulaessig (Mistral: HTTP 422)
+    s_api = settings_mod.Settings(tool="api", hf_filename="translategemma-12b-it.Q4_K_M.gguf")
+    assert prompt_format_for(s_api) == "default"
