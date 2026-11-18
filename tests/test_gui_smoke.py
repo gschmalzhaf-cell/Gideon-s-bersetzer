@@ -149,6 +149,7 @@ def test_theme_applied_and_season_label(qapp, tmp_path, monkeypatch):
     win2 = MainWindow(Settings(output_dir=str(tmp_path), theme="dark"))
     assert win2.windowTitle() == "Gideon's Übersetzer"  # kein Emoji im festen Modus
     assert win2.lbl_season.text() == ""
+    theme.apply_theme(qapp, "dark")  # live-Übernahme wie nach Einstellungs-OK in _open_settings
     assert theme.PALETTES["dark"]["accent"] in qapp.styleSheet()
     win2.close()
     win2.deleteLater()
