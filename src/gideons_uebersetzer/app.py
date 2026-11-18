@@ -24,14 +24,16 @@ def main() -> int:
 
     from .main_window import MainWindow
     from .settings import load_settings, save_settings
+    from .theme import apply_theme
     from .wizard import FirstStartWizard
+
+    settings = load_settings()
 
     QCoreApplication.setOrganizationName("Gideons-Uebersetzer")
     QCoreApplication.setApplicationName("Gideons-Uebersetzer")
     app = QApplication(sys.argv)
     app.setApplicationDisplayName("Gideon's Übersetzer")
-
-    settings = load_settings()
+    apply_theme(app, settings.theme)  # kuscheliges saisonales Design ab dem ersten Fenster
     if not settings.first_start_done:
         wizard = FirstStartWizard(settings)
         wizard.exec()

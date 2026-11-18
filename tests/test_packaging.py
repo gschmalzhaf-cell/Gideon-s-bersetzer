@@ -88,6 +88,7 @@ def test_spec_onedir_collect():
     spec = (ROOT / "packaging" / "gideons_uebersetzer.spec").read_text(encoding="utf-8")
     assert "COLLECT(" in spec
     assert "exclude_binaries=True" in spec
+    assert "gideons_uebersetzer.theme" in spec  # Theme-Modul im Bundle
 
 
 def test_installer_iss_installiert_ganzen_app_ordner():

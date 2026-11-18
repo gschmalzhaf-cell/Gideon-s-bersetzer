@@ -26,6 +26,18 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.2.3 – 2026-11-18
+
+### Neu
+- **Kuscheliges saisonales Design:** neues Theme-Modul (`theme.py`) mit Qt-Stylesheet.
+  Standard-Modus „Automatisch (saisonal)“ wechselt die Palette mit der Jahreszeit – aktuell
+  **Herbst** (warmes Creme/Amber, Akzent Kastanie, 🍂 im Fenstertitel und als Gruß-Label),
+  dazu Winter (❄️, eisiges Blau mit Kerzenrot), Frühling (🌸) und Sommer (☀️). Dazu
+  abgerundete Buttons und Eingabefelder, warmer Farbverlauf im Fensterhintergrund,
+  Akzentfarbe für Fortschrittsbalken und Textauswahl. Fest wählbar in den Einstellungen
+  (Design-Dropdown): „Hell“ und „Dunkel (kuschelig)“; wird live übernommen und erscheint im
+  Diagnose-Report.
+
 ## v1.2.2 – 2026-11-17
 
 ### Geändert

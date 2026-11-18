@@ -29,7 +29,7 @@ def test_main_window_builds(qapp, tmp_path, monkeypatch):
     monkeypatch.setattr("gideons_uebersetzer.settings.default_settings_path", lambda: tmp_path / "settings.json")
     settings = Settings(output_dir=str(tmp_path))
     win = MainWindow(settings)
-    assert win.windowTitle() == "Gideon's Übersetzer"
+    assert "Gideon's Übersetzer" in win.windowTitle()  # saisonaler Modus hängt ein Emoji davor
     assert win.btn_start.isEnabled()
     assert not win.btn_cancel.isEnabled()
     assert "OFFLINE" in win.lbl_tool.text()
@@ -94,3 +94,24 @@ def test_main_window_has_queue_list(qapp, tmp_path, monkeypatch):
     assert win.list_files.count() == 2
     win._remove_selected.__self__  # Methode existiert
     win.close()
+
+
+def test_theme_applied_and_season_label(qapp, tmp_path, monkeypatch):
+    from gideons_uebersetzer import theme
+
+    monkeypatch.setattr("gideons_uebersetzer.settings.default_settings_path", lambda: tmp_path / "settings.json")
+    win = MainWindow(Settings(output_dir=str(tmp_path)))  # Default: saisonal
+    assert "border-radius" in qapp.styleSheet()  # Theme wurde auf die App angewendet
+    assert win.lbl_season.text() != ""  # z. B. "🍂 Herbst"
+    win.close()
+
+    win2 = MainWindow(Settings(output_dir=str(tmp_path), theme="dark"))
+    assert win2.windowTitle() == "Gideon's Übersetzer"  # kein Emoji im festen Modus
+    assert win2.lbl_season.text() == ""
+    assert theme.PALETTES["dark"]["accent"] in qapp.styleSheet()
+    win2.close()
+
+    dlg = SettingsDialog(Settings())
+    assert dlg.cmb_theme.count() == 3
+    assert dlg.cmb_theme.currentData() == "seasonal"
+    dlg.close()

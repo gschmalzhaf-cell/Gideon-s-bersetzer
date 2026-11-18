@@ -41,6 +41,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import model_manager, pdf_reader, report as report_mod
+from . import theme as theme_mod
 from .cache import TranslationCache
 from .pipeline import CancelledError, PipelineListener, TranslationPipeline
 from .settings import LEGACY_HF_FILENAMES, MODEL_PRESETS, Settings, model_preset_index, save_settings
@@ -268,6 +269,13 @@ class SettingsDialog(QDialog):
 
         form = QFormLayout()
 
+        self.cmb_theme = QComboBox()
+        for tid, label in theme_mod.THEME_CHOICES:
+            self.cmb_theme.addItem(label, tid)
+        idx = next((i for i, (tid, _l) in enumerate(theme_mod.THEME_CHOICES) if tid == settings.theme), 0)
+        self.cmb_theme.setCurrentIndex(idx)
+        form.addRow("Design:", self.cmb_theme)
+
         self.cmb_tool = QComboBox()
         self.cmb_tool.addItem("Offline (lokal, empfohlen)", "offline")
         self.cmb_tool.addItem("Mistral-API (Online-Notnagel)", "api")
@@ -472,6 +480,7 @@ class SettingsDialog(QDialog):
 
     def _accept(self) -> None:
         s = self.settings
+        s.theme = self.cmb_theme.currentData()
         s.tool = self.cmb_tool.currentData()
         s.online_enabled = self.chk_online.isChecked()
         s.api_key = self.txt_api_key.text().strip()
@@ -530,14 +539,23 @@ class MainWindow(QMainWindow):
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
         self.settings = settings
-        self.setWindowTitle("Gideon's Übersetzer")
+        self.setWindowTitle(theme_mod.window_title(settings.theme))
         self.resize(760, 640)
         self.setAcceptDrops(True)
         self._worker: _Worker | None = None
+        if QApplication.instance() is not None:
+            theme_mod.apply_theme(QApplication.instance(), settings.theme)
 
         central = QWidget(self)
+        central.setObjectName("central")  # transparent, damit der Farbverlauf des Fensters sichtbar bleibt
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
+
+        # saisonaler Gruß (z. B. "🍂 Herbst") im automatischen Design
+        self.lbl_season = QLabel(theme_mod.season_label(settings.theme))
+        self.lbl_season.setStyleSheet("font-size: 14pt; font-weight: 600;")
+        self.lbl_season.setVisible(bool(self.lbl_season.text()))
+        layout.addWidget(self.lbl_season)
 
         # Warteschlange: Dokumente (PDF/EPUB/DOCX), werden in dieser Reihenfolge abgearbeitet
         self.list_files = QListWidget()
@@ -779,6 +797,12 @@ class MainWindow(QMainWindow):
             self.txt_glossar.setText(self.settings.glossary_path)
             self.txt_output.setText(str(self.settings.resolved_output_dir()))
             self._refresh_tool_label()
+            # Design live übernehmen (saisonale Palette, Fenstertitel, Gruß-Label)
+            if QApplication.instance() is not None:
+                theme_mod.apply_theme(QApplication.instance(), self.settings.theme)
+            self.setWindowTitle(theme_mod.window_title(self.settings.theme))
+            self.lbl_season.setText(theme_mod.season_label(self.settings.theme))
+            self.lbl_season.setVisible(bool(self.lbl_season.text()))
 
     # --- Übersetzung starten / abbrechen ---
 

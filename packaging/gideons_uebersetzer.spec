@@ -45,6 +45,7 @@ hiddenimports = [
     "gideons_uebersetzer.mistral_ocr",
     "gideons_uebersetzer.report",
     "gideons_uebersetzer.updater",
+    "gideons_uebersetzer.theme",
     "huggingface_hub",
     "requests",
     "pymupdf",

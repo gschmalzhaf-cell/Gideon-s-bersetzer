@@ -116,6 +116,7 @@ class Settings:
     output_dir: str = ""  # leer = Standard-Zielordner
     ocr_enabled: bool = True  # gescannte PDF-Seiten per OCR erkennen
     ocr_backend: str = "local"  # "local" (RapidOCR) oder "mistral" (nur im Online-Betrieb)
+    theme: str = "seasonal"  # "seasonal" (kuschelig, wechselt mit der Jahreszeit), "light" oder "dark"
     first_start_done: bool = False
 
     def resolved_model_path(self) -> Path:
@@ -156,6 +157,8 @@ def load_settings(path: Path | None = None) -> Settings:
         settings.hf_filename = DEFAULT_HF_FILENAME
     if settings.ocr_backend not in ("local", "mistral"):
         settings.ocr_backend = "local"
+    if settings.theme not in ("seasonal", "light", "dark"):
+        settings.theme = "seasonal"
     return settings
 
 
