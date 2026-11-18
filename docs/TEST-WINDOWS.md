@@ -20,7 +20,7 @@ Automatisch baut die GitHub-Action `.github/workflows/build-windows.yml` den Ins
 bei jedem Push auf `main` (Artefakt + Draft-Release `latest-build`) bzw. bei Tag `v*`
 als veröffentlichten Release.
 
-Kontrolle: `packaging\dist\Gideons-Uebersetzer.exe` startet ohne Python auf dem Testrechner
+Kontrolle: `packaging\\dist\\Gideons-Uebersetzer\\Gideons-Uebersetzer.exe` startet ohne Python auf dem Testrechner
 (kein Konsolenfenster, Hauptfenster erscheint).
 
 ## 2. 1-Klick-Beweis (Abnahmekriterium 3)

@@ -58,16 +58,16 @@ jobs:
       - name: Tests laufen lassen
         run: python -m pytest -q
 
-      - name: PyInstaller – eine EXE (packaging\dist\Gideons-Uebersetzer.exe)
+      - name: PyInstaller – App-Ordner (packaging\dist\Gideons-Uebersetzer\)
         run: pyinstaller packaging/gideons_uebersetzer.spec --clean --noconfirm --distpath packaging/dist --workpath build/pyinstaller
 
-      - name: Pruefen – DLL-Bundle im EXE (llama, python312.dll, VC-Runtime, Importe von python312.dll)
-        run: python packaging/check_bundle.py packaging/dist/Gideons-Uebersetzer.exe
+      - name: Pruefen – DLL-Bundle im App-Ordner (llama, python312.dll, VC-Runtime, Importe von python312.dll)
+        run: python packaging/check_bundle.py packaging/dist/Gideons-Uebersetzer
 
       - name: Smoke-Test – EXE startet ohne Importfehler (--version, Exitcode 0)
         shell: pwsh
         run: |
-          $exe = Join-Path $PWD "packaging\dist\Gideons-Uebersetzer.exe"
+          $exe = Join-Path $PWD "packaging\dist\Gideons-Uebersetzer\Gideons-Uebersetzer.exe"
           $p = Start-Process -FilePath $exe -ArgumentList "--version" -Wait -PassThru
           Write-Host "Exitcode der EXE: $($p.ExitCode)"
           if ($p.ExitCode -ne 0) { Write-Error "EXE startet nicht sauber (Exitcode $($p.ExitCode)) – wahrscheinlich Importfehler im Bundle"; exit 1 }

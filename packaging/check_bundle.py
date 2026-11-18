@@ -1,24 +1,24 @@
-"""Prueft das PyInstaller-Bundle der gebauten EXE (CI und lokaler Windows-Build).
+"""Prueft das PyInstaller-Bundle (CI und lokaler Windows-Build) – Onedir-Ordner oder Onefile-EXE.
 
-Aufruf: python packaging/check_bundle.py packaging/dist/Gideons-Uebersetzer.exe
+Aufruf:
+    python packaging/check_bundle.py packaging/dist/Gideons-Uebersetzer            # Onedir (App-Ordner)
+    python packaging/check_bundle.py .../Gideons-Uebersetzer/Gideons-Uebersetzer.exe  # Onefile-EXE
 
 Prueft:
 - llama.dll und ggml-*.dll liegen im Bundle (sonst laedt das lokale Modell nicht)
-- python312.dll und das VC++-Runtime (vcruntime140.dll) liegen im Bundle; ohne
-  installiertes VC-Redist auf dem Zielrechner startet die EXE sonst nicht mit
+- python312.dll und vcruntime140.dll liegen im Bundle; ohne installiertes VC-Redist auf
+  dem Zielrechner startet die App sonst nicht mit
   "Failed to load Python DLL ... LoadLibrary: Das angegebene Modul wurde nicht gefunden"
-- jede DLL, die die gebündelte python312.dll importiert, ist entweder im Bundle
-  selbst oder eine System-DLL, die Windows 10/11 von Haus aus liefert
-  (api-ms-win-*, ext-ms-win-*, ucrtbase.dll, kernel32.dll, ...)
+- jede DLL, die python312.dll importiert, ist im Bundle oder eine System-DLL, die
+  Windows 10/11 von Haus aus liefert (api-ms-win-*, ext-ms-win-*, ucrtbase.dll, ...)
 
 Exitcode 0 = alles ok, 1 = Problem (CI schlaegt dann fehl).
 """
 
 from __future__ import annotations
 
+import os
 import sys
-
-from PyInstaller.archive.readers import CArchiveReader
 
 BS = chr(92)  # Backslash (im Source vermeiden, damit das Skript ueberall gleich bleibt)
 
@@ -51,14 +51,29 @@ def unsatisfied_imports(imports, bundle_names) -> list[str]:
     return missing
 
 
-def python_dll_imports(reader: CArchiveReader, dll_name: str = "python312.dll") -> list[str]:
-    """Liest die Import-Tabelle der gebündelten Python-DLL direkt aus dem EXE-Archiv."""
+def dll_names_from_dir(root: str) -> list[str]:
+    """Alle DLLs unterhalb von root (Onedir: payload liegt in _internal/), als rel. Pfade mit '/'."""
+    names = []
+    for dirpath, _dirnames, filenames in os.walk(root):
+        for f in filenames:
+            if f.lower().endswith(".dll"):
+                names.append(os.path.relpath(os.path.join(dirpath, f), root).replace(BS, "/"))
+    return names
+
+
+def find_file(root: str, basename_lower: str) -> str | None:
+    for dirpath, _dirnames, filenames in os.walk(root):
+        for f in filenames:
+            if f.lower() == basename_lower:
+                return os.path.join(dirpath, f)
+    return None
+
+
+def imports_from_file(path: str) -> list[str]:
+    """Import-Tabelle einer PE-Datei (pefile wird erst hier importiert, damit Unit-Tests ohne pefile laufen)."""
     import pefile
 
-    key = next((n for n in reader.toc if n.replace(BS, "/").lower() == dll_name), None)
-    if key is None:
-        return []
-    pe = pefile.PE(data=reader.extract(key))
+    pe = pefile.PE(path)
     imports = []
     for entry in getattr(pe, "DIRECTORY_ENTRY_IMPORT", []):
         dll = entry.dll.decode("ascii", "replace") if isinstance(entry.dll, bytes) else str(entry.dll)
@@ -67,24 +82,53 @@ def python_dll_imports(reader: CArchiveReader, dll_name: str = "python312.dll") 
     return imports
 
 
-def main(exe_path: str) -> int:
+def imports_from_archive(exe_path: str) -> list[str]:
+    """Import-Tabelle der python312.dll direkt aus einer Onefile-EXE (CArchive) lesen."""
+    import tempfile
+
+    from PyInstaller.archive.readers import CArchiveReader
+
     reader = CArchiveReader(exe_path)
-    names = [n.replace(BS, "/") for n in reader.toc]
-    dlls = [n for n in names if n.lower().endswith(".dll")]
-    print(f"{len(names)} Eintraege, {len(dlls)} DLLs im Bundle")
+    key = next((n for n in reader.toc if n.replace(BS, "/").lower() == "python312.dll"), None)
+    if key is None:
+        return []
+    data = reader.extract(key)
+    with tempfile.NamedTemporaryFile(suffix=".dll", delete=False) as tf:
+        tf.write(data)
+        tmp = tf.name
+    try:
+        return imports_from_file(tmp)
+    finally:
+        os.unlink(tmp)
+
+
+def main(path: str) -> int:
+    if os.path.isdir(path):
+        dlls = dll_names_from_dir(path)
+        total = sum(len(files) for _r, _d, files in os.walk(path))
+        print(f"Onedir-Bundle {path}: {total} Dateien, {len(dlls)} DLLs")
+        py_file = find_file(path, "python312.dll")
+        imports = imports_from_file(py_file) if py_file else []
+    else:
+        from PyInstaller.archive.readers import CArchiveReader
+
+        reader = CArchiveReader(path)
+        names = [n.replace(BS, "/") for n in reader.toc]
+        dlls = [n for n in names if n.lower().endswith(".dll")]
+        print(f"{len(names)} Eintraege, {len(dlls)} DLLs im Bundle")
+        imports = imports_from_archive(path) if "python312.dll" in {n.lower() for n in dlls} else []
 
     problems: list[str] = []
-    if not any(n.endswith("llama.dll") for n in dlls):
+    bases = {n.lower().split("/")[-1] for n in dlls}
+    if "llama.dll" not in bases:
         problems.append("llama.dll fehlt im Bundle")
-    if not any("ggml" in n.lower() for n in dlls):
+    if not any("ggml" in b for b in bases):
         problems.append("ggml-DLLs fehlen im Bundle")
-    lower_dlls = {n.lower() for n in dlls}
     for required in ("python312.dll", "vcruntime140.dll"):
-        if required not in lower_dlls:
-            problems.append(f"{required} fehlt im Bundle (EXE startet ohne VC-Redist auf dem Zielrechner nicht)")
+        if required not in bases:
+            problems.append(f"{required} fehlt im Bundle (App startet ohne VC-Redist auf dem Zielrechner nicht)")
 
-    if "python312.dll" in lower_dlls:
-        imports = python_dll_imports(reader)
+    if imports:
         print("python312.dll importiert:", ", ".join(sorted(set(imports))))
         missing = unsatisfied_imports(imports, dlls)
         if missing:
@@ -93,7 +137,7 @@ def main(exe_path: str) -> int:
             print("Alle Importe von python312.dll sind im Bundle oder Windows-System-DLLs.")
 
     interesting = [n for n in dlls if any(k in n.lower() for k in ("python", "vcruntime", "msvcp", "vcomp", "llama", "ggml", "api-ms"))]
-    print("Relevante gebündelte DLLs:", ", ".join(sorted(interesting)))
+    print("Relevante gebuendelte DLLs:", ", ".join(sorted(interesting)))
 
     if problems:
         for p in problems:
@@ -104,5 +148,5 @@ def main(exe_path: str) -> int:
 
 
 if __name__ == "__main__":
-    path = sys.argv[1] if len(sys.argv) > 1 else "packaging/dist/Gideons-Uebersetzer.exe"
+    path = sys.argv[1] if len(sys.argv) > 1 else "packaging/dist/Gideons-Uebersetzer"
     sys.exit(main(path))

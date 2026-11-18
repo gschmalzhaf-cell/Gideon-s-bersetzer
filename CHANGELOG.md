@@ -26,6 +26,21 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.2.2 – 2026-11-17
+
+### Geändert
+- **Packaging: Onedir statt Onefile.** Die App wird jetzt als Ordner installiert
+  (`Gideons-Uebersetzer.exe` + `_internal\`), nicht mehr als einzelne EXE, die sich bei jedem
+  Start nach `%TEMP%\_MEI...` entpackt. Hintergrund: der wiederkehrende Startfehler
+  „Failed to load Python DLL ... python312.dll – LoadLibrary: Das angegebene Modul wurde nicht
+  gefunden“ tritt bei Onefile-Builds auf, wenn ein Antivirus (z. B. Windows Defender) eine frisch
+  entpackte DLL im temporären `_MEI`-Verzeichnis quarantäniert. Ohne Temp-Extrakt entfällt diese
+  Fehlerquelle; die VC-Runtime-DLLs liegen außerdem weiterhin garantiert im Bundle.
+- **CI-Bundle-Check jetzt für Onedir:** `packaging/check_bundle.py` akzeptiert außer der EXE auch
+  den App-Ordner (`packaging/dist/Gideons-Uebersetzer`) und prüft `llama.dll`/`ggml`,
+  `python312.dll`, `vcruntime140.dll` sowie sämtliche Importe von `python312.dll`
+  (im Bundle oder Windows-System-DLL). Läuft in CI und in `build-windows.bat`.
+
 ## v1.2.1 – 2026-11-17
 
 ### Behoben

@@ -48,7 +48,7 @@ Name: "german"; MessagesFile: "compiler:Languages\German.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: checkedonce
 
 [Files]
-Source: "dist\Gideons-Uebersetzer.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "dist\Gideons-Uebersetzer\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "README-de.txt"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]

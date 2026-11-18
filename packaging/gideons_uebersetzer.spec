@@ -1,10 +1,14 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller-Spec für Gideon's Übersetzer (Windows, eine einzelne .exe).
+r"""PyInstaller-Spec für Gideon's Übersetzer (Windows, Onedir: App-Ordner statt einer einzelnen EXE).
 
 Aufruf auf dem Windows-Build-Rechner (aus dem Ordner packaging/):
     pyinstaller gideons_uebersetzer.spec --clean --noconfirm
 
-Ergebnis: dist/Gideons-Uebersetzer.exe
+Ergebnis: dist/Gideons-Uebersetzer/  mit  Gideons-Uebersetzer.exe + _internal/
+Onedir statt Onefile: Beim Onefile-Build entpackt sich die EXE bei jedem Start nach
+%TEMP%\_MEI... - manche Antiviren (z. B. Windows Defender) quarantähnen dort frisch
+entpackte DLLs; dann startet die App nicht ("Failed to load Python DLL ... python312.dll").
+Ohne Temp-Extrakt entfällt diese Fehlerquelle.
 
 Wichtig: Für CUDA-Beschleunigung muss vorher das CUDA-Build von
 llama-cpp-python installiert sein (siehe requirements.txt). collect_all
@@ -98,9 +102,7 @@ pyz = PYZ(a.pure)
 exe = EXE(
     pyz,
     a.scripts,
-    a.binaries,
-    a.datas,
-    [],
+    exclude_binaries=True,  # Onedir: Binaries/Daten wandern via COLLECT nach _internal/
     name="Gideons-Uebersetzer",
     debug=False,
     bootloader_ignore_signals=False,
@@ -112,4 +114,13 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None,
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.datas,
+    strip=False,
+    upx=False,
+    name="Gideons-Uebersetzer",
 )

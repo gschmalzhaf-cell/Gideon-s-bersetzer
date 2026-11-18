@@ -73,7 +73,7 @@ python -m gideons_uebersetzer.app
 ## Paketierung (Windows, M4)
 
 1. Das CPU-Wheel von `llama-cpp-python` kommt aus `requirements.txt` (der Release-Installer bündelt die CPU-Variante – das CUDA-Build lädt auf Rechnern ohne NVIDIA-Treiber nicht; siehe requirements.txt).
-2. `pyinstaller packaging/gideons_uebersetzer.spec --distpath packaging/dist` → `packaging\dist\Gideons-Uebersetzer.exe`
+2. `pyinstaller packaging/gideons_uebersetzer.spec --distpath packaging/dist` → `packaging\\dist\\Gideons-Uebersetzer\\` (Onedir: EXE + `_internal`)
 3. Inno Setup 6 mit `packaging/installer.iss` kompilieren → `packaging\dist\Tolino-Uebersetzer-Setup-<Version>.exe`
 
 oder lokal alles auf einmal: `packaging\build-windows.bat`

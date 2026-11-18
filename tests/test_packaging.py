@@ -38,7 +38,7 @@ def test_ci_kein_cuda_wheel_im_release_build_und_bundle_check():
     wf = (ROOT / ".github" / "workflows" / "build-windows.yml").read_text(encoding="utf-8")
     assert "abetlen.github.io" not in wf
     assert "llama_supports_gpu_offload" in wf
-    assert "check_bundle.py" in wf
+    assert "check_bundle.py packaging/dist/Gideons-Uebersetzer" in wf
     check = (ROOT / "packaging" / "check_bundle.py").read_text(encoding="utf-8")
     assert "CArchiveReader" in check
     assert "llama.dll" in check and "ggml" in check
@@ -82,3 +82,34 @@ def test_app_version_matches_changelog_top():
     assert gideons_uebersetzer.__version__ == top[1:]
     pyproject = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert f'version = "{top[1:]}"' in pyproject
+
+
+def test_spec_onedir_collect():
+    spec = (ROOT / "packaging" / "gideons_uebersetzer.spec").read_text(encoding="utf-8")
+    assert "COLLECT(" in spec
+    assert "exclude_binaries=True" in spec
+
+
+def test_installer_iss_installiert_ganzen_app_ordner():
+    iss = (ROOT / "packaging" / "installer.iss").read_text(encoding="utf-8")
+    assert "dist" + chr(92) + "Gideons-Uebersetzer" + chr(92) + "*" in iss
+    assert "recursesubdirs" in iss
+
+
+def test_check_bundle_onedir_hilfsfunktionen(tmp_path):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("check_bundle_dir", ROOT / "packaging" / "check_bundle.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    internal = tmp_path / "_internal"
+    (internal / "llama_cpp" / "lib").mkdir(parents=True)
+    (internal / "llama_cpp" / "lib" / "llama.dll").write_bytes(b"x")
+    (internal / "llama_cpp" / "lib" / "ggml-cpu.dll").write_bytes(b"x")
+    (internal / "python312.dll").write_bytes(b"x")
+    (internal / "vcruntime140.dll").write_bytes(b"x")
+    dlls = mod.dll_names_from_dir(str(tmp_path))
+    assert "_internal/python312.dll" in dlls
+    assert "_internal/llama_cpp/lib/llama.dll" in dlls
+    assert mod.find_file(str(tmp_path), "vcruntime140.dll").endswith("vcruntime140.dll")
+    assert mod.find_file(str(tmp_path), "fehlt.dll") is None
