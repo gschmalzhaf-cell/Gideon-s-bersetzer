@@ -55,8 +55,14 @@ jobs:
       - name: llama.cpp pruefen (CPU-Wheel muss auf dem Runner ladbar sein)
         run: python -c "import llama_cpp; llama_cpp.llama_supports_gpu_offload(); print('llama_cpp nativ ladbar')"
 
-      - name: Tests laufen lassen
-        run: python -m pytest -q
+      - name: Tests laufen lassen (DIAGNOSE)
+        run: |
+          python -m pytest -q
+          Write-Host "EXIT_ALL=$LASTEXITCODE"
+          python -m pytest -q tests/test_gui_smoke.py
+          Write-Host "EXIT_GUI=$LASTEXITCODE"
+          python -m pytest -q --ignore=tests/test_gui_smoke.py
+          Write-Host "EXIT_NOGUI=$LASTEXITCODE"
 
       - name: PyInstaller – App-Ordner (packaging\dist\Gideons-Uebersetzer\)
         run: pyinstaller packaging/gideons_uebersetzer.spec --clean --noconfirm --distpath packaging/dist --workpath build/pyinstaller
