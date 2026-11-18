@@ -543,8 +543,6 @@ class MainWindow(QMainWindow):
         self.resize(760, 640)
         self.setAcceptDrops(True)
         self._worker: _Worker | None = None
-        if QApplication.instance() is not None:
-            theme_mod.apply_theme(QApplication.instance(), settings.theme)
 
         central = QWidget(self)
         central.setObjectName("central")  # transparent, damit der Farbverlauf des Fensters sichtbar bleibt

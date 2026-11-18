@@ -38,6 +38,13 @@ Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
   (Design-Dropdown): „Hell“ und „Dunkel (kuschelig)“; wird live übernommen und erscheint im
   Diagnose-Report.
 
+### Behoben
+- **CI: GUI-Smoke-Tests crashten nach „alle Tests bestanden“ mit Zugriffsverletzung
+  (0xC0000005) beim Prozess-Teardown** – der Build schlug dadurch mit Exitcode 1 fehl.
+  Qt wird in den Tests jetzt kontrolliert abgebaut (Fenster schließen, `deleteLater`,
+  QApplication per `shiboken6.delete` freigeben), und das App-Stylesheet wird nicht mehr in
+  jedem `MainWindow.__init__` erneut gesetzt (einmalig in `app.py` bzw. nach Einstellungs-OK).
+
 ## v1.2.2 – 2026-11-17
 
 ### Geändert
