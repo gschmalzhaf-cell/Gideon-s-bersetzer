@@ -11,6 +11,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QObject, QThread, Signal
 from PySide6.QtWidgets import (
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -71,6 +72,8 @@ class ModelPage(QWizardPage):
         self.setTitle("Offline-Modell laden")
         self.setSubTitle("Einmalig ca. 4–5 GB von Hugging Face – danach läuft alles lokal ohne Internet.")
 
+        grp = QGroupBox("Lokales Übersetzungsmodell")
+        grp_layout = QVBoxLayout(grp)
         self.info_label = QLabel()
         self.info_label.setWordWrap(True)
         self.progress = QProgressBar()
@@ -78,6 +81,7 @@ class ModelPage(QWizardPage):
         self.status_label = QLabel("")
         self.status_label.setWordWrap(True)
         self.btn_download = QPushButton("Modell jetzt laden")
+        self.btn_download.setObjectName("primaryButton")
         self.btn_cancel = QPushButton("Abbrechen")
         self.btn_cancel.setVisible(False)
         self.btn_download.clicked.connect(self._start_download)
@@ -85,14 +89,18 @@ class ModelPage(QWizardPage):
         self._worker = None
         self._thread = None
 
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.info_label)
-        layout.addWidget(self.progress)
-        layout.addWidget(self.status_label)
+        grp_layout.addWidget(self.info_label)
+        grp_layout.addWidget(self.progress)
+        grp_layout.addWidget(self.status_label)
         row = QHBoxLayout()
         row.addWidget(self.btn_download)
         row.addWidget(self.btn_cancel)
-        layout.addLayout(row)
+        row.addStretch(1)
+        grp_layout.addLayout(row)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(grp)
+        layout.addStretch(1)
         self._update_info()
 
     def _update_info(self) -> None:
@@ -177,6 +185,8 @@ class ModePage(QWizardPage):
         self.setTitle("Wie soll übersetzt werden?")
         self.setSubTitle("Der Offline-Weg ist empfohlen und an erster Stelle vorausgewählt.")
 
+        grp_offline = QGroupBox("Empfohlen: Lokal auf Ihrem Gerät")
+        off_layout = QVBoxLayout(grp_offline)
         self.radio_offline = QRadioButton("OFFLINE (empfohlen, Standard)")
         self.radio_offline.setChecked(True)
         offline_desc = QLabel(
@@ -184,14 +194,20 @@ class ModePage(QWizardPage):
             "und übersetzt danach vollständig lokal auf Ihrem Gerät. Kein Internet nötig, "
             "kein API-Schlüssel nötig. Kein Buchinhalt verlässt Ihr Gerät."
         )
+        offline_desc.setObjectName("hintLabel")
         offline_desc.setWordWrap(True)
         offline_desc.setIndent(20)
+        off_layout.addWidget(self.radio_offline)
+        off_layout.addWidget(offline_desc)
 
+        grp_online = QGroupBox("Optional: Online-Notnagel")
+        on_layout = QVBoxLayout(grp_online)
         self.radio_online = QRadioButton("NOTNAGEL: Mistral-API (Online-Betrieb)")
         online_desc = QLabel(
             "ACHTUNG: In diesem Modus wird der Buchtext an Mistral (api.mistral.ai) übertragen. "
             "Er ist nur nach Ihrem bewussten Einschalten aktiv und niemals automatisch."
         )
+        online_desc.setObjectName("hintLabel")
         online_desc.setWordWrap(True)
         online_desc.setIndent(20)
 
@@ -205,17 +221,18 @@ class ModePage(QWizardPage):
         self.radio_offline.toggled.connect(self._update_enabled)
         self.radio_online.toggled.connect(self._update_enabled)
 
+        on_layout.addWidget(self.radio_online)
+        on_layout.addWidget(online_desc)
+        on_layout.addSpacing(4)
+        on_layout.addWidget(QLabel("API-Schlüssel:"))
+        on_layout.addWidget(self.key_edit)
+        on_layout.addWidget(QLabel("API-Modell:"))
+        on_layout.addWidget(self.model_edit)
+
         layout = QVBoxLayout(self)
-        layout.addWidget(self.radio_offline)
-        layout.addWidget(offline_desc)
-        layout.addSpacing(12)
-        layout.addWidget(self.radio_online)
-        layout.addWidget(online_desc)
-        layout.addSpacing(8)
-        layout.addWidget(QLabel("API-Schlüssel:"))
-        layout.addWidget(self.key_edit)
-        layout.addWidget(QLabel("API-Modell:"))
-        layout.addWidget(self.model_edit)
+        layout.addWidget(grp_offline)
+        layout.addWidget(grp_online)
+        layout.addStretch(1)
 
     def _update_enabled(self) -> None:
         online = self.radio_online.isChecked()
@@ -239,20 +256,26 @@ class FirstStartWizard(QWizard):
         self.settings = settings
         self.setWindowTitle("Erststart-Assistent – Gideon's Übersetzer")
         self.setWizardStyle(QWizard.ModernStyle)
+        self.resize(620, 480)
 
         intro = QWizardPage()
         intro.setTitle("Willkommen bei Gideon's Übersetzer")
+        intro.setSubTitle("Englische Bücher (PDF, EPUB, DOCX) bequem ins Deutsche übersetzen.")
+        intro_grp = QGroupBox("Überblick")
+        intro_grp_layout = QVBoxLayout(intro_grp)
         intro_text = QLabel(
-            "Diese Anwendung übersetzt englischsprachige PDFs ins Deutsche und erzeugt "
-            "eine EPUB-Datei für Ihren Tolino.\n\n"
-            "Standardmäßig arbeitet sie OFFLINE: Das Übersetzungsmodell wird einmalig "
-            "heruntergeladen und liegt dann lokal auf Ihrem Gerät. Ohne eingeschalteten "
-            "Online-Betrieb verlässt kein Buchinhalt das Gerät.\n\n"
-            "Im nächsten Schritt wählen Sie den Weg – Offline ist vorausgewählt."
+            "Diese Anwendung übersetzt englischsprachige Dokumente (PDF, EPUB, DOCX) ins Deutsche "
+            "und erzeugt eine fertige EPUB-Datei für Ihren Tolino.\n\n"
+            "• Standardmäßig OFFLINE: Das Übersetzungsmodell wird einmalig heruntergeladen und "
+            "liegt dann lokal auf Ihrem Gerät. Kein Buchinhalt verlässt das Gerät.\n"
+            "• Einfache Bedienung: Dokumente in die Warteschlange ziehen und „Übersetzen starten“ klicken.\n\n"
+            "Im nächsten Schritt wählen Sie den Übersetzungsweg – Offline ist vorausgewählt."
         )
         intro_text.setWordWrap(True)
+        intro_grp_layout.addWidget(intro_text)
         intro_layout = QVBoxLayout(intro)
-        intro_layout.addWidget(intro_text)
+        intro_layout.addWidget(intro_grp)
+        intro_layout.addStretch(1)
 
         self.mode_page = ModePage()
         self.model_page = ModelPage(settings)
@@ -262,19 +285,24 @@ class FirstStartWizard(QWizard):
         self.addPage(self.model_page)
 
         finish = QWizardPage()
-        finish.setTitle("Fertig")
+        finish.setTitle("Fertig eingerichtet")
+        finish.setSubTitle("Alles bereit für Ihre erste Buchübersetzung.")
         finish.setFinalPage(True)
+        finish_grp = QGroupBox("So geht es weiter")
+        finish_grp_layout = QVBoxLayout(finish_grp)
         finish_text = QLabel(
-            "Sie sind startklar.\n\n"
-            "• Offline: Sobald das Modell geladen ist, können Sie ein PDF wählen und übersetzen – "
-            "komplett ohne Internet.\n"
-            "• Online (nur falls eingeschaltet): Tragen Sie Ihren API-Schlüssel in den "
-            "Einstellungen ein.\n\n"
-            "Die Einstellungen können jederzeit über „Einstellungen …“ im Hauptfenster geändert werden."
+            "Sie sind startklar:\n\n"
+            "1. Ziehen Sie ein oder mehrere englische Bücher (PDF, EPUB, DOCX) in das Hauptfenster.\n"
+            "2. Klicken Sie auf „Übersetzen starten“.\n"
+            "3. Das fertige deutsche EPUB landet in Ihrem Zielordner.\n\n"
+            "Alle Einstellungen sowie das Design (saisonal, hell, dunkel) können jederzeit über "
+            "„Einstellungen …“ oben rechts im Hauptfenster angepasst werden."
         )
         finish_text.setWordWrap(True)
+        finish_grp_layout.addWidget(finish_text)
         finish_layout = QVBoxLayout(finish)
-        finish_layout.addWidget(finish_text)
+        finish_layout.addWidget(finish_grp)
+        finish_layout.addStretch(1)
         self.addPage(finish)
 
     def accept(self) -> None:
@@ -294,3 +322,4 @@ class FirstStartWizard(QWizard):
         self.settings.first_start_done = True
         save_settings(self.settings)
         super().accept()
+

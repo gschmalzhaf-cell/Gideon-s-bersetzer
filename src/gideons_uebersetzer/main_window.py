@@ -25,17 +25,19 @@ from PySide6.QtWidgets import (
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
-    QListWidget,
     QProgressBar,
     QProgressDialog,
     QPushButton,
     QSpinBox,
+    QTabWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -259,127 +261,198 @@ class _GuiListener(PipelineListener):
 
 
 class SettingsDialog(QDialog):
-    """Einstellungen – persistiert in settings.json im Benutzerprofil."""
+    """Einstellungen – übersichtlich in Reitern gegliedert und persistiert in settings.json."""
 
     def __init__(self, settings: Settings, parent=None):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle("Einstellungen")
-        self.resize(620, 560)
+        self.resize(660, 560)
 
-        form = QFormLayout()
+        self.tabs = QTabWidget(self)
+
+        # --- Reiter 1: Allgemein & Modus ---
+        tab_general = QWidget()
+        layout_general = QVBoxLayout(tab_general)
+
+        grp_look = QGroupBox("Darstellung && Ablage")
+        form_look = QFormLayout(grp_look)
 
         self.cmb_theme = QComboBox()
         for tid, label in theme_mod.THEME_CHOICES:
             self.cmb_theme.addItem(label, tid)
         idx = next((i for i, (tid, _l) in enumerate(theme_mod.THEME_CHOICES) if tid == settings.theme), 0)
         self.cmb_theme.setCurrentIndex(idx)
-        form.addRow("Design:", self.cmb_theme)
+        form_look.addRow("Design:", self.cmb_theme)
+
+        out_row = QHBoxLayout()
+        self.txt_output = QLineEdit(str(settings.resolved_output_dir()))
+        btn_out = QPushButton("Wählen …")
+        btn_out.clicked.connect(self._pick_output)
+        out_row.addWidget(self.txt_output, 1)
+        out_row.addWidget(btn_out)
+        form_look.addRow("Zielordner (EPUB):", out_row)
+
+        glossar_row = QHBoxLayout()
+        self.txt_glossar = QLineEdit(settings.glossary_path)
+        self.txt_glossar.setPlaceholderText("Optional: Textdatei mit „Begriff = Übersetzung“ pro Zeile")
+        btn_glossar = QPushButton("Wählen …")
+        btn_glossar.clicked.connect(self._pick_glossar)
+        glossar_row.addWidget(self.txt_glossar, 1)
+        glossar_row.addWidget(btn_glossar)
+        form_look.addRow("Glossar-Datei:", glossar_row)
+        layout_general.addWidget(grp_look)
+
+        grp_mode = QGroupBox("Übersetzungs-Modus")
+        form_mode = QFormLayout(grp_mode)
 
         self.cmb_tool = QComboBox()
-        self.cmb_tool.addItem("Offline (lokal, empfohlen)", "offline")
+        self.cmb_tool.addItem("Offline (lokal auf diesem Gerät, empfohlen)", "offline")
         self.cmb_tool.addItem("Mistral-API (Online-Notnagel)", "api")
         self.cmb_tool.setCurrentIndex(0 if settings.tool == "offline" else 1)
-        form.addRow("Werkzeug:", self.cmb_tool)
+        self.cmb_tool.currentIndexChanged.connect(self._sync_mode_fields)
+        form_mode.addRow("Werkzeug:", self.cmb_tool)
 
         self.chk_online = QCheckBox("Online-Betrieb bewusst einschalten")
         self.chk_online.setChecked(settings.online_enabled)
+        self.chk_online.toggled.connect(self._sync_mode_fields)
         self.lbl_online_warning = QLabel(
             "ACHTUNG: Eingeschaltet wird der Buchtext an Mistral (api.mistral.ai) übertragen. "
             "Ohne Häkchen verlässt kein Buchinhalt das Gerät."
         )
+        self.lbl_online_warning.setObjectName("hintLabel")
         self.lbl_online_warning.setWordWrap(True)
-        form.addRow("Online-Betrieb:", self.chk_online)
-        form.addRow("", self.lbl_online_warning)
+        form_mode.addRow("Online-Schutz:", self.chk_online)
+        form_mode.addRow("", self.lbl_online_warning)
 
         self.txt_api_key = QLineEdit(settings.api_key)
         self.txt_api_key.setEchoMode(QLineEdit.Password)
-        form.addRow("API-Schlüssel:", self.txt_api_key)
+        self.txt_api_key.setPlaceholderText("Mistral-API-Schlüssel (nur für Online-Betrieb)")
+        form_mode.addRow("API-Schlüssel:", self.txt_api_key)
         self.txt_api_model = QLineEdit(settings.api_model)
-        form.addRow("API-Modell:", self.txt_api_model)
+        form_mode.addRow("API-Modell:", self.txt_api_model)
+        layout_general.addWidget(grp_mode)
+        layout_general.addStretch(1)
 
-        self.spin_temp = QDoubleSpinBox()
-        self.spin_temp.setRange(0.0, 1.0)
-        self.spin_temp.setSingleStep(0.05)
-        self.spin_temp.setValue(settings.temperature)
-        form.addRow("Temperatur:", self.spin_temp)
+        # --- Reiter 2: Offline-Modell ---
+        tab_model = QWidget()
+        layout_model = QVBoxLayout(tab_model)
 
-        self.spin_chunk = QSpinBox()
-        self.spin_chunk.setRange(200, 5000)
-        self.spin_chunk.setSingleStep(100)
-        self.spin_chunk.setValue(settings.chunk_size)
-        form.addRow("Wörter pro Abschnitt:", self.spin_chunk)
-
-        self.chk_ocr = QCheckBox("Gescannte PDF-Seiten per OCR erkennen (langsamer)")
-        self.chk_ocr.setChecked(settings.ocr_enabled)
-        form.addRow("OCR:", self.chk_ocr)
-
-        self.cmb_ocr_backend = QComboBox()
-        self.cmb_ocr_backend.addItem("Lokal (RapidOCR, ohne Datenversand)", "local")
-        self.cmb_ocr_backend.addItem("Mistral OCR – nur im Online-Betrieb, Seitenbilder gehen an Mistral", "mistral")
-        self.cmb_ocr_backend.setCurrentIndex(1 if settings.ocr_backend == "mistral" else 0)
-        form.addRow("OCR-Backend:", self.cmb_ocr_backend)
-
-        glossar_row = QHBoxLayout()
-        self.txt_glossar = QLineEdit(settings.glossary_path)
-        btn_glossar = QPushButton("…")
-        btn_glossar.clicked.connect(self._pick_glossar)
-        glossar_row.addWidget(self.txt_glossar)
-        glossar_row.addWidget(btn_glossar)
-        form.addRow("Glossar-Datei:", glossar_row)
-
-        out_row = QHBoxLayout()
-        self.txt_output = QLineEdit(str(settings.resolved_output_dir()))
-        btn_out = QPushButton("…")
-        btn_out.clicked.connect(self._pick_output)
-        out_row.addWidget(self.txt_output)
-        out_row.addWidget(btn_out)
-        form.addRow("Zielordner (EPUB):", out_row)
-
-        model_row = QHBoxLayout()
-        self.txt_model = QLineEdit(str(settings.resolved_model_path()))
-        btn_model_file = QPushButton("…")
-        btn_model_file.clicked.connect(self._pick_model_file)
-        model_row.addWidget(self.txt_model)
-        model_row.addWidget(btn_model_file)
-        form.addRow("Offline-Modell:", model_row)
+        grp_model = QGroupBox("Lokales Sprachmodell (GGUF)")
+        form_model = QFormLayout(grp_model)
 
         self.cmb_model = QComboBox()
         for p in MODEL_PRESETS:
             self.cmb_model.addItem(p["label"], p["id"])
         idx = model_preset_index(settings.hf_repo, settings.hf_filename)
         self.cmb_model.setCurrentIndex(idx if idx >= 0 else 0)
-        form.addRow("Modell-Download:", self.cmb_model)
+        form_model.addRow("Modell-Auswahl:", self.cmb_model)
+
+        model_row = QHBoxLayout()
+        self.txt_model = QLineEdit(str(settings.resolved_model_path()))
+        btn_model_file = QPushButton("Datei …")
+        btn_model_file.clicked.connect(self._pick_model_file)
+        model_row.addWidget(self.txt_model, 1)
+        model_row.addWidget(btn_model_file)
+        form_model.addRow("Modell-Pfad:", model_row)
+
         self.lbl_model_hint = QLabel("")
+        self.lbl_model_hint.setObjectName("hintLabel")
         self.lbl_model_hint.setWordWrap(True)
-        form.addRow("", self.lbl_model_hint)
+        form_model.addRow("", self.lbl_model_hint)
         self._update_model_hint()
 
         self.lbl_model_usage = QLabel("")
         self.lbl_model_usage.setWordWrap(True)
-        form.addRow("Speicher:", self.lbl_model_usage)
+        form_model.addRow("Speicherstatus:", self.lbl_model_usage)
 
         model_btn_row = QHBoxLayout()
-        self.btn_model_download = QPushButton("Modell laden")
+        self.btn_model_download = QPushButton("Gewähltes Modell laden")
+        self.btn_model_download.setObjectName("primaryButton")
         self.btn_model_delete = QPushButton("Modell löschen")
         self.btn_model_download.clicked.connect(self._download_model)
         self.btn_model_delete.clicked.connect(self._delete_model)
         model_btn_row.addWidget(self.btn_model_download)
         model_btn_row.addWidget(self.btn_model_delete)
-        form.addRow("", model_btn_row)
+        model_btn_row.addStretch(1)
+        form_model.addRow("", model_btn_row)
+        layout_model.addWidget(grp_model)
 
-        self.btn_wizard = QPushButton("Erststart-Assistenten erneut öffnen")
+        grp_wiz = QGroupBox("Einrichtungs-Hilfe")
+        wiz_layout = QVBoxLayout(grp_wiz)
+        wiz_hint = QLabel("Führt Schritt für Schritt durch die Wahl zwischen Offline-Modell und Online-Notnagel.")
+        wiz_hint.setObjectName("hintLabel")
+        wiz_hint.setWordWrap(True)
+        self.btn_wizard = QPushButton("Erststart-Assistenten erneut öffnen …")
         self.btn_wizard.clicked.connect(self._rerun_wizard)
-        form.addRow("", self.btn_wizard)
+        wiz_layout.addWidget(wiz_hint)
+        wiz_layout.addWidget(self.btn_wizard)
+        layout_model.addWidget(grp_wiz)
+        layout_model.addStretch(1)
+
+        # --- Reiter 3: Qualität & OCR ---
+        tab_quality = QWidget()
+        layout_quality = QVBoxLayout(tab_quality)
+
+        grp_quality = QGroupBox("Übersetzungs-Feineinstellungen")
+        form_quality = QFormLayout(grp_quality)
+
+        self.spin_temp = QDoubleSpinBox()
+        self.spin_temp.setRange(0.0, 1.0)
+        self.spin_temp.setSingleStep(0.05)
+        self.spin_temp.setValue(settings.temperature)
+        self.spin_temp.setToolTip("Niedriger (z. B. 0,2–0,3) = sachlicher und treuer am Original")
+        form_quality.addRow("Temperatur:", self.spin_temp)
+
+        self.spin_chunk = QSpinBox()
+        self.spin_chunk.setRange(200, 5000)
+        self.spin_chunk.setSingleStep(100)
+        self.spin_chunk.setValue(settings.chunk_size)
+        self.spin_chunk.setToolTip("Größere Abschnitte geben mehr Zusammenhang, brauchen aber mehr Speicher")
+        form_quality.addRow("Wörter pro Abschnitt:", self.spin_chunk)
+        layout_quality.addWidget(grp_quality)
+
+        grp_ocr = QGroupBox("Texterkennung für gescannte PDFs (OCR)")
+        form_ocr = QFormLayout(grp_ocr)
+
+        self.chk_ocr = QCheckBox("Gescannte PDF-Seiten automatisch per OCR erkennen")
+        self.chk_ocr.setChecked(settings.ocr_enabled)
+        form_ocr.addRow("OCR aktiv:", self.chk_ocr)
+
+        self.cmb_ocr_backend = QComboBox()
+        self.cmb_ocr_backend.addItem("Lokal (RapidOCR – kein Datenversand)", "local")
+        self.cmb_ocr_backend.addItem("Mistral OCR (nur im Online-Betrieb – Seitenbilder an Mistral)", "mistral")
+        self.cmb_ocr_backend.setCurrentIndex(1 if settings.ocr_backend == "mistral" else 0)
+        form_ocr.addRow("OCR-Backend:", self.cmb_ocr_backend)
+        layout_quality.addWidget(grp_ocr)
+        layout_quality.addStretch(1)
+
+        self.tabs.addTab(tab_general, "Allgemein && Modus")
+        self.tabs.addTab(tab_model, "Offline-Modell")
+        self.tabs.addTab(tab_quality, "Qualität && OCR")
 
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btn_ok = buttons.button(QDialogButtonBox.Ok)
+        if btn_ok is not None:
+            btn_ok.setText("Speichern")
+            btn_ok.setObjectName("primaryButton")
+        btn_cancel = buttons.button(QDialogButtonBox.Cancel)
+        if btn_cancel is not None:
+            btn_cancel.setText("Abbrechen")
         buttons.accepted.connect(self._accept)
         buttons.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)
-        layout.addLayout(form)
+        layout.addWidget(self.tabs, 1)
         layout.addWidget(buttons)
+        self._sync_mode_fields()
         self._refresh_usage()
+
+    def _sync_mode_fields(self) -> None:
+        is_api = self.cmb_tool.currentData() == "api"
+        online = self.chk_online.isChecked()
+        self.txt_api_key.setEnabled(is_api or online)
+        self.txt_api_model.setEnabled(is_api or online)
 
     def _pick_glossar(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Glossar-Datei wählen", "", "Textdateien (*.txt);;Alle Dateien (*)")
@@ -401,10 +474,10 @@ class SettingsDialog(QDialog):
         usage = model_manager.model_disk_usage(model_path)
         parent = model_path.parent if model_path.parent.exists() else Path.home()
         free = model_manager.free_space_bytes(parent)
-        state = "vorhanden" if model_manager.is_model_present(model_path) else "nicht vorhanden"
+        state = "Bereit (lokal vorhanden)" if model_manager.is_model_present(model_path) else "Noch nicht heruntergeladen"
         self.lbl_model_usage.setText(
-            f"Modell {state}: {model_path}\nBelegt: {model_manager.format_bytes(usage)} – "
-            f"frei auf dem Laufwerk: {model_manager.format_bytes(free)}"
+            f"{state}\nPfad: {model_path}\nBelegt: {model_manager.format_bytes(usage)} – "
+            f"frei auf Laufwerk: {model_manager.format_bytes(free)}"
         )
 
     def _update_model_hint(self) -> None:
@@ -412,7 +485,7 @@ class SettingsDialog(QDialog):
         if current in LEGACY_HF_FILENAMES:
             self.lbl_model_hint.setText(
                 "Hinweis: Es ist ein älteres Modell geladen. Für deutlich bessere Übersetzungen "
-                "oben ein aktuelles Modell wählen und „Modell laden“ klicken."
+                "oben ein aktuelles Modell wählen und „Gewähltes Modell laden“ klicken."
             )
         else:
             self.lbl_model_hint.setText("")
@@ -505,23 +578,29 @@ class SummaryDialog(QDialog):
     def __init__(self, result, tool: str, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Übersetzung abgeschlossen")
-        self.resize(520, 320)
+        self.resize(540, 320)
         layout = QVBoxLayout(self)
+
+        grp = QGroupBox("Ergebnis Ihres Tolino-EPUBs")
+        grp_layout = QVBoxLayout(grp)
         text = QLabel()
         lines = [
-            f"Seiten: {result.pages}",
-            f"Wörter: {result.words}",
-            f"Abschnitte: {result.chunks_done} übersetzt, {result.chunks_failed} fehlgeschlagen (von {result.chunks_total})",
-            f"Dauer: {fmt_duration(result.duration_seconds)}",
+            f"• Seiten: {result.pages}   |   Wörter: {result.words}",
+            f"• Abschnitte: {result.chunks_done} übersetzt, {result.chunks_failed} fehlgeschlagen (von {result.chunks_total})",
+            f"• Dauer: {fmt_duration(result.duration_seconds)}",
         ]
         if tool == "api":
-            lines.append(f"An Mistral gesendete Zeichen: {result.chars_sent} (für die Kostenschätzung)")
-        lines.append(f"Ausgabedatei: {result.output_path}")
+            lines.append(f"• An Mistral gesendete Zeichen: {result.chars_sent} (für die Kostenschätzung)")
+        lines.append(f"\nGespeichert unter:\n{result.output_path}")
         text.setText("\n".join(lines))
         text.setWordWrap(True)
-        layout.addWidget(text)
+        grp_layout.addWidget(text)
+        layout.addWidget(grp, 1)
+
         row = QHBoxLayout()
+        row.addStretch(1)
         btn_open = QPushButton("Ablageordner öffnen")
+        btn_open.setObjectName("primaryButton")
         btn_open.clicked.connect(self._open_folder)
         btn_close = QPushButton("Schließen")
         btn_close.clicked.connect(self.accept)
@@ -540,7 +619,7 @@ class MainWindow(QMainWindow):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle(theme_mod.window_title(settings.theme))
-        self.resize(760, 640)
+        self.resize(840, 680)
         self.setAcceptDrops(True)
         self._worker: _Worker | None = None
 
@@ -548,98 +627,156 @@ class MainWindow(QMainWindow):
         central.setObjectName("central")  # transparent, damit der Farbverlauf des Fensters sichtbar bleibt
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(10)
 
-        # saisonaler Gruß (z. B. "🍂 Herbst") im automatischen Design
+        # --- Kopfbereich: Titel, saisonaler Gruß und Schnellzugriffe ---
+        header_row = QHBoxLayout()
+        title_col = QVBoxLayout()
+        title_col.setSpacing(2)
+        self.lbl_title = QLabel("Gideon's Übersetzer")
+        self.lbl_title.setObjectName("headerTitle")
+        self.lbl_subtitle = QLabel("Englische Bücher (PDF, EPUB, DOCX) ins Deutsche übersetzen → Tolino-EPUB")
+        self.lbl_subtitle.setObjectName("headerSubtitle")
+        title_col.addWidget(self.lbl_title)
+        title_col.addWidget(self.lbl_subtitle)
+        header_row.addLayout(title_col, 1)
+
+        # saisonaler Gruß (z. B. "🍂 Herbst") als Pill-Badge im automatischen Design
         self.lbl_season = QLabel(theme_mod.season_label(settings.theme))
-        self.lbl_season.setStyleSheet("font-size: 14pt; font-weight: 600;")
+        self.lbl_season.setObjectName("seasonBadge")
         self.lbl_season.setVisible(bool(self.lbl_season.text()))
-        layout.addWidget(self.lbl_season)
+        header_row.addWidget(self.lbl_season, 0, Qt.AlignmentFlag.AlignVCenter)
 
-        # Warteschlange: Dokumente (PDF/EPUB/DOCX), werden in dieser Reihenfolge abgearbeitet
-        self.list_files = QListWidget()
-        self.list_files.setToolTip("Dokumente in dieser Reihenfolge zur Warteschlange hinzufügen")
-        queue_btns = QVBoxLayout()
-        btn_add = QPushButton("Hinzufügen …")
-        btn_add.clicked.connect(self._add_files)
-        btn_remove = QPushButton("Entfernen")
-        btn_remove.clicked.connect(self._remove_selected)
-        btn_clear = QPushButton("Leeren")
-        btn_clear.clicked.connect(self.list_files.clear)
-        for b in (btn_add, btn_remove, btn_clear):
-            queue_btns.addWidget(b)
-        queue_btns.addStretch(1)
-        queue_row = QHBoxLayout()
-        queue_row.addWidget(self.list_files, 1)
-        queue_row.addLayout(queue_btns)
-        layout.addLayout(queue_row)
-
-        # Werkzeug + Einstellungen
-        tool_row = QHBoxLayout()
-        self.lbl_tool = QLabel()
-        btn_settings = QPushButton("Einstellungen …")
-        btn_settings.clicked.connect(self._open_settings)
-        btn_report = QPushButton("Report erstellen …")
-        btn_report.setToolTip("Diagnose-Report als Markdown-Datei speichern (kein API-Schlüssel, keine Buchinhalte)")
-        btn_report.clicked.connect(self._create_report)
         btn_update = QPushButton("Update …")
         btn_update.setToolTip("Manuell nach neuer Version auf GitHub suchen (kontaktiert api.github.com)")
         btn_update.clicked.connect(self._check_update)
-        tool_row.addWidget(self.lbl_tool)
-        tool_row.addStretch(1)
-        tool_row.addWidget(btn_update)
-        tool_row.addWidget(btn_report)
-        tool_row.addWidget(btn_settings)
-        layout.addLayout(tool_row)
+        btn_report = QPushButton("Diagnose-Report …")
+        btn_report.setToolTip("Diagnose-Report als Markdown-Datei speichern (kein API-Schlüssel, keine Buchinhalte)")
+        btn_report.clicked.connect(self._create_report)
+        btn_settings = QPushButton("Einstellungen …")
+        btn_settings.setToolTip("Design, Offline-Modell, Online-Notnagel und OCR konfigurieren")
+        btn_settings.clicked.connect(self._open_settings)
+        header_row.addWidget(btn_update, 0, Qt.AlignmentFlag.AlignVCenter)
+        header_row.addWidget(btn_report, 0, Qt.AlignmentFlag.AlignVCenter)
+        header_row.addWidget(btn_settings, 0, Qt.AlignmentFlag.AlignVCenter)
+        layout.addLayout(header_row)
 
-        glossar_row = QHBoxLayout()
-        glossar_row.addWidget(QLabel("Glossar:"))
-        self.txt_glossar = QLineEdit(settings.glossary_path)
-        self.txt_glossar.setPlaceholderText("optional: Textdatei mit „Begriff = Übersetzung“-Zeilen")
-        btn_glossar = QPushButton("…")
-        btn_glossar.clicked.connect(lambda: self._pick_file(self.txt_glossar, "Glossar wählen", "Textdateien (*.txt);;Alle (*)"))
-        glossar_row.addWidget(self.txt_glossar)
-        glossar_row.addWidget(btn_glossar)
-        layout.addLayout(glossar_row)
+        # --- Schritt 1: Dokumente auswählen (Warteschlange) ---
+        self.grp_queue = QGroupBox("1. Dokumente auswählen (Warteschlange)")
+        queue_layout = QVBoxLayout(self.grp_queue)
+        queue_layout.setSpacing(6)
+
+        self.lbl_drop_hint = QLabel(
+            "Tipp: Dateien einfach per Drag & Drop hierher ziehen oder über „+ Dokumente hinzufügen …“ auswählen. "
+            "Mehrere Bücher werden automatisch nacheinander übersetzt."
+        )
+        self.lbl_drop_hint.setObjectName("hintLabel")
+        self.lbl_drop_hint.setWordWrap(True)
+        queue_layout.addWidget(self.lbl_drop_hint)
+
+        queue_row = QHBoxLayout()
+        self.list_files = QListWidget()
+        self.list_files.setToolTip("Dokumente in dieser Reihenfolge zur Warteschlange hinzufügen (PDF, EPUB, DOCX)")
+        self.list_files.setMinimumHeight(110)
+
+        queue_btns = QVBoxLayout()
+        queue_btns.setSpacing(6)
+        self.btn_add = QPushButton("+ Dokumente hinzufügen …")
+        self.btn_add.clicked.connect(self._add_files)
+        self.btn_remove = QPushButton("Auswahl entfernen")
+        self.btn_remove.clicked.connect(self._remove_selected)
+        self.btn_clear = QPushButton("Liste leeren")
+        self.btn_clear.clicked.connect(self.list_files.clear)
+        for b in (self.btn_add, self.btn_remove, self.btn_clear):
+            queue_btns.addWidget(b)
+        queue_btns.addStretch(1)
+
+        queue_row.addWidget(self.list_files, 1)
+        queue_row.addLayout(queue_btns)
+        queue_layout.addLayout(queue_row)
+        layout.addWidget(self.grp_queue)
+
+        # --- Schritt 2: Ausgabe & Optionen ---
+        self.grp_options = QGroupBox("2. Ausgabe && Übersetzungsmodus")
+        opts_form = QFormLayout(self.grp_options)
+        opts_form.setSpacing(8)
 
         out_row = QHBoxLayout()
-        out_row.addWidget(QLabel("Zielordner:"))
         self.txt_output = QLineEdit(str(settings.resolved_output_dir()))
-        btn_out = QPushButton("…")
+        self.txt_output.setToolTip("Hier werden die fertigen deutschen EPUB-Dateien abgelegt")
+        btn_out = QPushButton("Ordner wählen …")
         btn_out.clicked.connect(lambda: self._pick_dir(self.txt_output))
-        out_row.addWidget(self.txt_output)
+        btn_open_out = QPushButton("Ordner öffnen")
+        btn_open_out.setToolTip("Zielordner im Datei-Explorer öffnen")
+        btn_open_out.clicked.connect(self._open_output_dir)
+        out_row.addWidget(self.txt_output, 1)
         out_row.addWidget(btn_out)
-        layout.addLayout(out_row)
+        out_row.addWidget(btn_open_out)
+        opts_form.addRow("Zielordner (EPUB):", out_row)
 
-        # Start/Abbrechen
-        btn_row = QHBoxLayout()
+        glossar_row = QHBoxLayout()
+        self.txt_glossar = QLineEdit(settings.glossary_path)
+        self.txt_glossar.setPlaceholderText("Optional: eigene Wortliste („Begriff = Übersetzung“ pro Zeile)")
+        btn_glossar = QPushButton("Datei wählen …")
+        btn_glossar.clicked.connect(
+            lambda: self._pick_file(self.txt_glossar, "Glossar wählen", "Textdateien (*.txt);;Alle (*)")
+        )
+        glossar_row.addWidget(self.txt_glossar, 1)
+        glossar_row.addWidget(btn_glossar)
+        opts_form.addRow("Glossar (optional):", glossar_row)
+
+        mode_row = QHBoxLayout()
+        self.lbl_tool = QLabel()
+        self.lbl_tool.setObjectName("modeBadge")
+        btn_change_mode = QPushButton("Modus / Modell ändern …")
+        btn_change_mode.clicked.connect(self._open_settings)
+        mode_row.addWidget(self.lbl_tool, 1)
+        mode_row.addWidget(btn_change_mode)
+        opts_form.addRow("Aktives Werkzeug:", mode_row)
+        layout.addWidget(self.grp_options)
+
+        # --- Schritt 3: Start & Fortschritt ---
+        self.grp_run = QGroupBox("3. Übersetzung && Live-Einblick")
+        run_layout = QVBoxLayout(self.grp_run)
+        run_layout.setSpacing(8)
+
+        action_row = QHBoxLayout()
         self.btn_start = QPushButton("Übersetzen starten")
+        self.btn_start.setObjectName("primaryButton")
         self.btn_start.clicked.connect(self._start)
         self.btn_cancel = QPushButton("Abbrechen")
         self.btn_cancel.setEnabled(False)
         self.btn_cancel.clicked.connect(self._cancel)
-        btn_row.addWidget(self.btn_start)
-        btn_row.addWidget(self.btn_cancel)
-        btn_row.addStretch(1)
-        layout.addLayout(btn_row)
-
-        # Fortschritt
+        action_row.addWidget(self.btn_start)
+        action_row.addWidget(self.btn_cancel)
+        action_row.addSpacing(10)
         self.progress = QProgressBar()
-        layout.addWidget(self.progress)
-        self.lbl_status = QLabel("Bereit.")
-        layout.addWidget(self.lbl_status)
-        self.lbl_eta = QLabel("")
-        layout.addWidget(self.lbl_eta)
+        self.progress.setValue(0)
+        action_row.addWidget(self.progress, 1)
+        run_layout.addLayout(action_row)
 
-        layout.addWidget(QLabel("Live-Textprobe (gerade übersetzter Abschnitt):"))
+        status_row = QHBoxLayout()
+        self.lbl_status = QLabel("Bereit – Dokumente hinzufügen und „Übersetzen starten“ klicken.")
+        self.lbl_eta = QLabel("")
+        self.lbl_eta.setObjectName("hintLabel")
+        status_row.addWidget(self.lbl_status, 1)
+        status_row.addWidget(self.lbl_eta)
+        run_layout.addLayout(status_row)
+
+        # Reiter für Live-Textprobe und Protokoll (spart Platz, kein gequetschtes Doppelfeld)
+        self.output_tabs = QTabWidget()
         self.txt_preview = QPlainTextEdit()
         self.txt_preview.setReadOnly(True)
-        layout.addWidget(self.txt_preview)
-
-        layout.addWidget(QLabel("Protokoll:"))
+        self.txt_preview.setPlaceholderText("Hier erscheint während der Übersetzung live der deutsche Text des aktuellen Abschnitts …")
         self.txt_log = QPlainTextEdit()
         self.txt_log.setReadOnly(True)
         self.txt_log.setMaximumBlockCount(500)
-        layout.addWidget(self.txt_log)
+        self.txt_log.setPlaceholderText("Schritte, Kapitel-Erkennung und Hinweise werden hier protokolliert …")
+        self.output_tabs.addTab(self.txt_preview, "Live-Textprobe (aktueller Abschnitt)")
+        self.output_tabs.addTab(self.txt_log, "Protokoll && Details")
+        run_layout.addWidget(self.output_tabs, 1)
+        layout.addWidget(self.grp_run, 1)
 
         self._refresh_tool_label()
 
@@ -739,11 +876,19 @@ class MainWindow(QMainWindow):
         if self.settings.tool == "api":
             state = "EIN" if self.settings.online_enabled else "AUS"
             self.lbl_tool.setText(
-                f"Werkzeug: Mistral-API (Online-Betrieb: {state}) – "
+                f"Mistral-API (Online-Betrieb: {state}) – "
                 + ("sendet Buchtext an Mistral!" if self.settings.online_enabled else "nicht aktiv")
             )
         else:
-            self.lbl_tool.setText("Werkzeug: OFFLINE (lokal, empfohlen) – kein Buchinhalt verlässt das Gerät")
+            model_path = self.settings.resolved_model_path()
+            present = model_manager.is_model_present(model_path)
+            status_str = f"Modell bereit ({model_path.name})" if present else "Modell noch nicht geladen"
+            self.lbl_tool.setText(f"OFFLINE (lokal, empfohlen) – {status_str} · kein Buchinhalt verlässt das Gerät")
+
+    def _open_output_dir(self) -> None:
+        folder = Path(self.txt_output.text().strip() or str(self.settings.resolved_output_dir()))
+        folder.mkdir(parents=True, exist_ok=True)
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(folder)))
 
     # --- Datei-Dialoge / Drag & Drop ---
 

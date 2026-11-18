@@ -114,7 +114,7 @@ exe = EXE(
     target_arch="x64",
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon=os.path.join(SPEC_DIR, "app_icon.ico"),
 )
 
 coll = COLLECT(

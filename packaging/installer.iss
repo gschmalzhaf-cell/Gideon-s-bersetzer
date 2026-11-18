@@ -12,7 +12,7 @@
 
 #define MyAppName "Gideon's Übersetzer"
 #ifndef MyAppVersion
-#define MyAppVersion "1.1.2"
+#define MyAppVersion "1.2.4"
 #endif
 #define MyAppPublisher "Gideon's Übersetzer"
 #define MyAppExeName "Gideons-Uebersetzer.exe"
@@ -30,7 +30,11 @@ DefaultDirName={autopf}\Gideons-Uebersetzer
 DefaultGroupName={#MyAppName}
 OutputDir=dist
 OutputBaseFilename=Tolino-Uebersetzer-Setup
-SetupIconFile=
+SetupIconFile=app_icon.ico
+UninstallDisplayIcon={app}\{#MyAppExeName}
+WizardImageFile=wizard_banner.bmp
+WizardSmallImageFile=wizard_small.bmp
+WizardSizePercent=115
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -50,11 +54,12 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 [Files]
 Source: "dist\Gideons-Uebersetzer\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "README-de.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "app_icon.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\Gideon's Übersetzer"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\Gideon's Übersetzer"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon.ico"
 Name: "{group}\README (deutsch)"; Filename: "{app}\README-de.txt"
-Name: "{autodesktop}\Gideon's Übersetzer"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+Name: "{autodesktop}\Gideon's Übersetzer"; Filename: "{app}\{#MyAppExeName}"; IconFilename: "{app}\app_icon.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Gideon's Übersetzer jetzt starten (Erststart-Assistent lädt das Modell)"; Flags: nowait postinstall skipifsilent
@@ -64,3 +69,30 @@ function InitializeSetup(): Boolean;
 begin
   Result := True;
 end;
+
+procedure InitializeWizard();
+begin
+  { Kuscheliges App-Design im Installer übernehmen: warme Creme-/Kastanien-Palette
+    (BGR-Format in Pascal: $00BBGGRR -> Creme #F9F0E2 = $00E2F0F9, Feld #FFFAF1 = $00F1FAFF,
+    Dunkelbraun #4A3423 = $0023344A, Akzent Kastanie #B5651D = $001D65B5). }
+  WizardForm.Color := $00E2F0F9;
+  WizardForm.WelcomePage.Color := $00E2F0F9;
+  WizardForm.InnerPage.Color := $00E2F0F9;
+  WizardForm.MainPanel.Color := $00D6EAF7;
+  WizardForm.FinishedPage.Color := $00E2F0F9;
+
+  WizardForm.Font.Name := 'Segoe UI';
+  WizardForm.Font.Color := $0023344A;
+
+  WizardForm.WelcomeLabel1.Font.Color := $001D65B5;
+  WizardForm.WelcomeLabel2.Font.Color := $0023344A;
+  WizardForm.PageNameLabel.Font.Color := $001D65B5;
+  WizardForm.PageDescriptionLabel.Font.Color := $0023344A;
+  WizardForm.FinishedHeadingLabel.Font.Color := $001D65B5;
+  WizardForm.FinishedLabel.Font.Color := $0023344A;
+
+  WizardForm.InfoBeforeMemo.Color := $00F1FAFF;
+  WizardForm.InfoBeforeMemo.Font.Name := 'Consolas';
+  WizardForm.InfoBeforeMemo.Font.Color := $0023344A;
+end;
+

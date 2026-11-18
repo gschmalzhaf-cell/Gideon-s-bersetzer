@@ -114,3 +114,24 @@ def test_check_bundle_onedir_hilfsfunktionen(tmp_path):
     assert "_internal/llama_cpp/lib/llama.dll" in dlls
     assert mod.find_file(str(tmp_path), "vcruntime140.dll").endswith("vcruntime140.dll")
     assert mod.find_file(str(tmp_path), "fehlt.dll") is None
+
+
+def test_installer_design_assets_und_farben():
+    iss = (ROOT / "packaging" / "installer.iss").read_text(encoding="utf-8")
+    assert "SetupIconFile=app_icon.ico" in iss
+    assert "WizardImageFile=wizard_banner.bmp" in iss
+    assert "WizardSmallImageFile=wizard_small.bmp" in iss
+    assert "procedure InitializeWizard();" in iss
+    assert "WizardForm.Color" in iss
+
+    spec = (ROOT / "packaging" / "gideons_uebersetzer.spec").read_text(encoding="utf-8")
+    assert "app_icon.ico" in spec
+
+    ico = ROOT / "packaging" / "app_icon.ico"
+    banner = ROOT / "packaging" / "wizard_banner.bmp"
+    small = ROOT / "packaging" / "wizard_small.bmp"
+    assert ico.is_file() and ico.stat().st_size > 1000
+    assert ico.read_bytes()[:4] == b"\x00\x00\x01\x00"  # gültiger ICO-Header
+    assert banner.is_file() and banner.read_bytes()[:2] == b"BM"
+    assert small.is_file() and small.read_bytes()[:2] == b"BM"
+

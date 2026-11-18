@@ -26,6 +26,35 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.2.4 – 2026-11-18
+
+### Neu
+- **Intuitive 3-Schritte-Bedienung im Hauptfenster:** Das Hauptfenster ist jetzt klar in drei
+  nummerierte Bereiche gegliedert:
+  1. *Dokumente auswählen (Warteschlange)* – mit sichtbarem Drag-&-Drop-Hinweis und klaren
+     Listen-Aktionen („+ Dokumente hinzufügen …“, „Auswahl entfernen“, „Liste leeren“),
+  2. *Ausgabe & Übersetzungsmodus* – Zielordner inkl. Direktknopf „Ordner öffnen“, optionales
+     Glossar sowie Status-Badge des aktiven Werkzeugs (zeigt im Offline-Modus direkt an, ob und
+     welches lokale Modell bereitsteht),
+  3. *Übersetzung & Live-Einblick* – Hauptaktion „Übersetzen starten“ direkt neben dem
+     Fortschrittsbalken; darunter zwei übersichtliche Reiter für „Live-Textprobe (aktueller
+     Abschnitt)“ und „Protokoll & Details“ statt zweier übereinander gequetschter Textfelder.
+- **Einstellungen in 3 übersichtlichen Reitern:** „Allgemein & Modus“ (Design, Zielordner,
+  Glossar, Offline/Online-Werkzeug mit automatischer Aktivierung der API-Felder),
+  „Offline-Modell“ (Modell-Auswahl, Speicherstatus, Laden/Löschen, Erststart-Assistent) und
+  „Qualität & OCR“ (Temperatur, Abschnittsgröße, lokale oder Mistral-OCR).
+- **Installer im kuscheligen App-Design & eigenes App-Icon:** Neues Buch-Wappen-Icon
+  (`packaging/app_icon.ico`) für EXE, Fenster, Desktop-/Startmenü-Verknüpfungen und
+  Setup-Datei sowie passende Inno-Setup-Banner (`wizard_banner.bmp`, `wizard_small.bmp`)
+  und warme Creme-/Kastanien-Farbgebung im Installations-Assistenten (`InitializeWizard`).
+
+### Geändert
+- **Design abgerundet (`theme.py`):** Klare visuelle Hierarchie zwischen primären
+  Hauptaktionen (kräftiger Akzent-Button für „Übersetzen starten“, „Gewähltes Modell laden“,
+  „Speichern“) und sekundären Buttons (ruhiger, warm gerahmter Kartenton); dazu passend
+  gestaltete Reiter (`QTabWidget`), Checkbox-/Radio-Indikatoren, Status-Badges und ein
+  abgerundeter Erststart-Assistent.
+
 ## v1.2.3 – 2026-11-18
 
 ### Neu

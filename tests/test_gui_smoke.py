@@ -158,6 +158,23 @@ def test_theme_applied_and_season_label(qapp, tmp_path, monkeypatch):
     dlg = SettingsDialog(Settings())
     assert dlg.cmb_theme.count() == 3
     assert dlg.cmb_theme.currentData() == "seasonal"
+    assert dlg.tabs.count() == 3
     dlg.close()
     dlg.deleteLater()
     qapp.processEvents()
+
+
+def test_main_window_three_step_structure_and_tabs(qapp, tmp_path, monkeypatch):
+    monkeypatch.setattr("gideons_uebersetzer.settings.default_settings_path", lambda: tmp_path / "settings.json")
+    win = MainWindow(Settings(output_dir=str(tmp_path)))
+    assert "1." in win.grp_queue.title()
+    assert "2." in win.grp_options.title()
+    assert "3." in win.grp_run.title()
+    assert win.btn_start.objectName() == "primaryButton"
+    assert win.output_tabs.count() == 2
+    assert win.output_tabs.widget(0) is win.txt_preview
+    assert win.output_tabs.widget(1) is win.txt_log
+    win.close()
+    win.deleteLater()
+    qapp.processEvents()
+
