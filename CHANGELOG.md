@@ -26,6 +26,16 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.2.5 – 2026-11-18
+
+### Behoben
+- **Abschnitts-Überschriften („1. …“, „2. …“, „3. …“ sowie Karten-Titel in den Einstellungen)
+  saßen auf der Rahmenlinie und wirkten verrutscht:** `QGroupBox::title` saß bisher mit
+  `subcontrol-origin: margin` auf der oberen Rahmenkante, wodurch Qt hinter dem Titel einen
+  andersfarbigen Ausschnitt im Hintergrund-Farbverlauf gerendert hat. Die Überschriften liegen
+  jetzt mit `subcontrol-origin: padding` sauber als bündige Karten-Kopfzeile innerhalb der
+  abgerundeten Boxen.
+
 ## v1.2.4 – 2026-11-18
 
 ### Neu

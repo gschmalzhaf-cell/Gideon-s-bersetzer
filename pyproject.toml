@@ -1,10 +1,11 @@
 [project]
 name = "gideons-uebersetzer"
-version = "1.2.4"
+version = "1.2.5"
 description = "Englische PDFs lokal ins Deutsche übersetzen und als EPUB für den Tolino ausgeben"
 requires-python = ">=3.12"
 
 [tool.pytest.ini_options]
 pythonpath = ["src", "tests"]
 testpaths = ["tests"]
+
 

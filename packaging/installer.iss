@@ -12,7 +12,7 @@
 
 #define MyAppName "Gideon's Übersetzer"
 #ifndef MyAppVersion
-#define MyAppVersion "1.2.4"
+#define MyAppVersion "1.2.5"
 #endif
 #define MyAppPublisher "Gideon's Übersetzer"
 #define MyAppExeName "Gideons-Uebersetzer.exe"

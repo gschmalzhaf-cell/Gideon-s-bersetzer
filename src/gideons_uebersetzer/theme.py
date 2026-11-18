@@ -213,17 +213,21 @@ QProgressBar::chunk { background-color: __ACCENT__; border-radius: 7px; }
 QGroupBox {
     background-color: __GROUP__;
     border: 1px solid __BORDER__;
-    border-radius: 11px;
-    margin-top: 10px;
-    padding: 12px 10px 10px 10px;
+    border-radius: 12px;
+    margin-top: 4px;
+    padding: 30px 14px 12px 14px;
     font-weight: 600;
 }
 QGroupBox::title {
-    subcontrol-origin: margin;
+    subcontrol-origin: padding;
     subcontrol-position: top left;
-    left: 12px;
-    padding: 0 6px;
+    left: 14px;
+    top: 8px;
+    background-color: transparent;
     color: __ACCENT__;
+    border: none;
+    padding: 0px 2px;
+    font-size: 10.5pt;
     font-weight: 700;
 }
 QTabWidget::pane {
