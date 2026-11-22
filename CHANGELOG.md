@@ -26,6 +26,24 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.4.1 – 2026-11-22
+
+### Behoben
+- **Falsche Alarme „Der Text wirkt nicht übersetzt“ bei kurzen und normalen deutschen
+  Abschnitten (`translator_base.py`):** Die Stoppwort-Listen enthielten bisher auch
+  deutsch-identische Wörter wie `an`, `in`, `was`, `i` (bzw. `des` bei Französisch). Gerade
+  bei kurzen Abschnitten (z. B. *„Bitte spende an … / Kommentare an …“* oder *„In diesem
+  Kapitel …“*) überschritt bereits ein zweimaliges `an` die 6-%-Schwelle und ließ gültige
+  deutsche Übersetzungen 3× durchfallen. Deutsch-identische Wörter wurden entfernt; die
+  Prüfung verlangt nun mindestens 3 eindeutige Fremdsprachen-Stoppwörter (> 8 %) und schlägt
+  nicht mehr an, wenn mehr deutsche als fremdsprachige Stoppwörter vorliegen.
+
+### Neu
+- **Automatischer Rettungsversuch bei schwierigen Abschnitten (`pipeline.py`):** Beim
+  letzten Wiederholungsversuch wird der vorherige Stützkontext zurückgesetzt; schlägt ein
+  großer Abschnitt (≥ 250 Wörter) dennoch fehl, teilt die Pipeline ihn automatisch an einer
+  Absatz-/Satzgrenze in zwei Hälften und übersetzt beide Teile einzeln.
+
 ## v1.4.0 – 2026-11-22
 
 ### Neu

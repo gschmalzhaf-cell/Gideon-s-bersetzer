@@ -252,3 +252,54 @@ def test_pipeline_retry_failed_only(tmp_path, sample_pdf):
     assert len(calls) <= 2
     assert not cache_file.exists()  # jetzt komplett -> Cache wird geleert
 
+
+def test_quality_check_no_false_positive_on_german_an_in_was_short_chunks():
+    """Regression für Diagnose-Report v1.4.0: kurze deutsche Texte mit 'an', 'in', 'was'
+    oder unübersetztem englischem Titel dürfen NICHT als unübersetzt abgelehnt werden."""
+    src1 = "Puberty Blues\n\nPlease donate to Nifty!\n\nComments to jvanlan@black.com"
+    tr1 = "Puberty Blues\n\nBitte spende an Nifty!\n\nKommentare an jvanlan@black.com"
+    assert quality_check(src1, tr1, source_lang="en") is None
+
+    src2 = "Bachelor of Erotic Arts\n\nComments to jvanlan@black.com\n\nPLEASE DONATE TO NIFTY!"
+    tr2 = "Bachelor of Erotic Arts\n\nKommentare an jvanlan@black.com\n\nBITTE SPENDE AN NIFTY!"
+    assert quality_check(src2, tr2, source_lang="en") is None
+
+    src3 = "In this chapter, he asked what was happening in the room at that moment."
+    tr3 = "In diesem Kapitel fragte er, was in diesem Moment an diesem Ort geschah."
+    assert quality_check(src3, tr3, source_lang="en") is None
+
+
+def test_pipeline_splits_large_failing_chunk_in_half(tmp_path):
+    from gideons_uebersetzer.pdf_reader import PdfBook
+
+    p1 = " ".join(["English sentence number one with plenty of words."] * 25)
+    p2 = " ".join(["English sentence number two with plenty of words."] * 25)
+    book = PdfBook(
+        path=tmp_path / "big.pdf",
+        title="Big",
+        author="Author",
+        page_count=1,
+        chapters=[Chapter(title=None, paragraphs=[Paragraph(p1, 1), Paragraph(p2, 1)])],
+    )
+    (tmp_path / "big.pdf").write_bytes(b"%PDF-1.4")
+
+    class SplitRecoverTranslator:
+        def translate_stream(self, messages, temperature, on_token=None, cancel_event=None):
+            prompt = messages[1]["content"]
+            # Voller Block (> 2000 Zeichen) schlägt fehl; halbierte Blöcke gelingen
+            body = prompt.split('"""')[1]
+            if len(body.split()) > 240:
+                return "", 0
+            return ("Ein sauber übersetzter deutscher Absatz für diesen Teil. " * 25), 50
+
+    s = settings_mod.Settings(chunk_size=1500, output_dir=str(tmp_path), auto_glossary=False)
+    cache = TranslationCache(book.path, TranslationCache.cache_file_for(book.path, tmp_path))
+    pipe = TranslationPipeline(
+        book=book, translator=SplitRecoverTranslator(), settings=s, cache=cache,
+        listener=PipelineListener(), cancel_event=threading.Event(),
+    )
+    res = pipe.run()
+    assert res.chunks_failed == 0
+    assert res.chunks_done == 1
+
+

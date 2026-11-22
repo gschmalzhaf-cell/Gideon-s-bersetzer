@@ -56,19 +56,27 @@ FORBIDDEN_MARKERS = (
     "zu übersetzender text",
 )
 
-# Häufige Stoppwörter je Ausgangssprache; ein hoher Anteil deutet auf nicht übersetzten Text hin.
+# Eindeutige Stoppwörter je Ausgangssprache (ohne deutsch-identische Wörter wie "in", "an", "was", "des").
 ENGLISH_STOPWORDS = {
-    "the", "and", "of", "to", "in", "that", "is", "was", "it", "for", "on", "with",
-    "as", "at", "by", "an", "be", "this", "which", "or", "from", "but", "not",
-    "are", "were", "they", "he", "she", "his", "her", "you", "we", "i",
+    "the", "and", "of", "to", "that", "is", "it", "for", "on", "with",
+    "as", "at", "by", "be", "this", "which", "or", "from", "but", "not",
+    "are", "were", "they", "he", "she", "his", "her", "you", "we",
 }
 SOURCE_STOPWORDS = {
     "en": ENGLISH_STOPWORDS,
-    "fr": {"le", "la", "les", "des", "une", "est", "dans", "que", "qui", "pour", "pas", "avec", "plus", "mais", "nous", "vous", "cette", "était"},
+    "fr": {"le", "la", "les", "une", "est", "dans", "que", "qui", "pour", "pas", "avec", "plus", "mais", "nous", "vous", "cette", "était"},
     "es": {"el", "los", "las", "del", "una", "por", "para", "con", "pero", "como", "más", "este", "esta", "había", "todo", "muy", "porque"},
     "it": {"il", "lo", "gli", "della", "una", "che", "non", "per", "con", "come", "più", "anche", "questo", "questa", "sono", "era", "molto"},
 }
-MAX_ENGLISH_STOPWORD_RATIO = 0.06
+GERMAN_STOPWORDS = {
+    "der", "die", "das", "und", "ist", "nicht", "ein", "eine", "einer", "einem", "einen",
+    "ich", "sie", "wir", "ihr", "mit", "auf", "für", "von", "zu", "zum", "zur", "den", "dem",
+    "des", "sich", "auch", "aber", "oder", "wie", "noch", "nur", "schon", "wenn", "dass",
+    "war", "waren", "wird", "werden", "hat", "haben", "hatte", "kann", "können", "über",
+    "durch", "nach", "bei", "aus", "als", "bitte", "an", "in", "was", "diesem", "kapitel",
+}
+MAX_ENGLISH_STOPWORD_RATIO = 0.08
+MIN_FOREIGN_STOPWORDS = 3
 
 
 def build_system_prompt(style_profile: str = "literary", source_lang: str = "en") -> str:
@@ -320,10 +328,16 @@ def quality_check(source: str, translated: str, source_lang: str = "en") -> str 
     for marker in FORBIDDEN_MARKERS:
         if marker in lowered:
             return f"Die Antwort enthält unerwünschten Text („{marker}“)."
-    words = lowered.split()
+    words = [w.strip(".,;:!?\"'()[]«»„“") for w in lowered.split()]
+    words = [w for w in words if w]
     if words:
         stopwords = SOURCE_STOPWORDS.get(source_lang, ENGLISH_STOPWORDS)
-        foreign = sum(1 for w in words if w.strip(".,;:!?\"'()[]«»") in stopwords)
-        if foreign / len(words) > MAX_ENGLISH_STOPWORD_RATIO:
+        foreign = sum(1 for w in words if w in stopwords)
+        german = sum(1 for w in words if w in GERMAN_STOPWORDS)
+        if (
+            foreign >= MIN_FOREIGN_STOPWORDS
+            and foreign / len(words) > MAX_ENGLISH_STOPWORD_RATIO
+            and foreign > german
+        ):
             return "Der Text wirkt nicht übersetzt (auffällig viele Wörter der Ausgangssprache)."
     return None

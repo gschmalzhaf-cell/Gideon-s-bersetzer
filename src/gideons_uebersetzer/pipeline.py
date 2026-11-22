@@ -124,18 +124,20 @@ class TranslationPipeline:
     def _cancelled(self) -> bool:
         return self.cancel_event.is_set()
 
-    def _translate_chunk(self, chunk: Chunk, context: list[str]) -> tuple[str, int]:
-        """Ein Chunk inkl. Qualitätsprüfung und Wiederholung. Liefert (Text, gesendete Zeichen)."""
+    def _translate_single(self, text: str, chunk_index: int, context: list[str]) -> tuple[str, int]:
+        """Übersetzt einen Textblock mit Qualitätsprüfung und bis zu MAX_RETRIES Wiederholungen."""
         hint = ""
         last_problem = None
         fmt = prompt_format_for(self.settings)
-        relevant_glossary = intelligence.filter_relevant_glossary(self.glossary, chunk.text)
+        relevant_glossary = intelligence.filter_relevant_glossary(self.glossary, text)
         for attempt in range(1 + MAX_RETRIES):
             if self._cancelled():
                 raise CancelledError("Übersetzung abgebrochen.")
+            # Beim letzten Versuch ohne vorherigen Kontext versuchen (falls dieser verwirrt hat)
+            use_context = context if attempt < MAX_RETRIES else []
             messages = build_messages(
-                chunk.text,
-                context,
+                text,
+                use_context,
                 relevant_glossary,
                 extra_hint=hint,
                 fmt=fmt,
@@ -156,12 +158,12 @@ class TranslationPipeline:
             else:
                 translation, chars = result, 0
             translation = sanitize_translation(translation)
-            problem = quality_check(chunk.text, translation, source_lang=self.source_lang)
+            problem = quality_check(text, translation, source_lang=self.source_lang)
             if problem is None:
                 return translation, chars
             last_problem = problem
             self.listener.on_log(
-                f"Abschnitt {chunk.index + 1}: Qualitätsprüfung fehlgeschlagen ({problem}) – Versuch {attempt + 1} von {1 + MAX_RETRIES}."
+                f"Abschnitt {chunk_index + 1}: Qualitätsprüfung fehlgeschlagen ({problem}) – Versuch {attempt + 1} von {1 + MAX_RETRIES}."
             )
             hint = (
                 "Antworte ausschließlich mit der reinen deutschen Übersetzung des zu übersetzenden "
@@ -169,6 +171,43 @@ class TranslationPipeline:
                 "Anführungszeichen um den gesamten Text. Übersetze JEDEN Satz vollständig ins Deutsche."
             )
         raise ChunkFailedError(last_problem or "Unbekannter Fehler")
+
+    @staticmethod
+    def _split_in_half(text: str) -> tuple[str, str] | None:
+        """Teilt einen längeren Text sauber in zwei Hälften (an Absatz- oder Satzgrenze)."""
+        paras = [p.strip() for p in text.split("\n\n") if p.strip()]
+        if len(paras) >= 2:
+            mid = len(paras) // 2
+            return "\n\n".join(paras[:mid]), "\n\n".join(paras[mid:])
+        words = text.split()
+        if len(words) < 250:
+            return None
+        from .translator_base import _split_long_paragraph
+
+        parts = _split_long_paragraph(text, max(120, len(words) // 2))
+        if len(parts) >= 2:
+            mid = len(parts) // 2
+            return " ".join(parts[:mid]), " ".join(parts[mid:])
+        return None
+
+    def _translate_chunk(self, chunk: Chunk, context: list[str]) -> tuple[str, int]:
+        """Ein Chunk inkl. Qualitätsprüfung, Wiederholung und automatischem Halbieren als Fallback."""
+        try:
+            return self._translate_single(chunk.text, chunk.index, context)
+        except ChunkFailedError:
+            # Nur bei größeren Abschnitten (>= 250 Wörter) als Rettungsversuch halbieren
+            if chunk.word_count < 250:
+                raise
+            halves = self._split_in_half(chunk.text)
+            if halves is None:
+                raise
+            left, right = halves
+            self.listener.on_log(
+                f"Abschnitt {chunk.index + 1}: wird zur Fehlervermeidung automatisch in zwei kleinere Teile aufgeteilt …"
+            )
+            t_left, c_left = self._translate_single(left, chunk.index, context)
+            t_right, c_right = self._translate_single(right, chunk.index, [t_left])
+            return f"{t_left}\n\n{t_right}", c_left + c_right
 
     def _translate_chapter_titles(self) -> tuple[dict[int, str], int]:
         """Übersetzt erkannte Kapitelüberschriften gebündelt in einem Aufruf.
