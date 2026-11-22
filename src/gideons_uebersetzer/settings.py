@@ -55,6 +55,24 @@ def model_preset_index(repo: str, filename: str) -> int:
 DEFAULT_CHUNK_WORDS = 1500
 DEFAULT_TEMPERATURE = 0.3
 
+# Unterstützte Ausgangssprachen (Ziel ist immer Deutsch).
+SOURCE_LANGUAGES = [
+    ("auto", "Automatisch erkennen (Empfohlen)"),
+    ("en", "Englisch"),
+    ("fr", "Französisch"),
+    ("es", "Spanisch"),
+    ("it", "Italienisch"),
+]
+SOURCE_LANG_IDS = {sid for sid, _label in SOURCE_LANGUAGES}
+
+# Stil- & Genre-Profile für die Übersetzung.
+STYLE_PROFILES = [
+    ("literary", "Roman / Belletristik (flüssig, literarisch)"),
+    ("nonfiction", "Sachbuch (klar, präzise)"),
+    ("technical", "Fachbuch / Technik (exakt, Fachbegriffe erhalten)"),
+]
+STYLE_PROFILE_IDS = {pid for pid, _label in STYLE_PROFILES}
+
 
 def app_data_dir() -> Path:
     """Gibt das Konfigurationsverzeichnis im Benutzerprofil zurück."""
@@ -117,6 +135,10 @@ class Settings:
     ocr_enabled: bool = True  # gescannte PDF-Seiten per OCR erkennen
     ocr_backend: str = "local"  # "local" (RapidOCR) oder "mistral" (nur im Online-Betrieb)
     theme: str = "seasonal"  # "seasonal" (kuschelig, wechselt mit der Jahreszeit), "light" oder "dark"
+    source_lang: str = "auto"  # "auto", "en", "fr", "es", "it"
+    style_profile: str = "literary"  # "literary", "nonfiction", "technical"
+    bilingual: bool = False  # Zweisprachiges EPUB (Original + Deutsch)
+    auto_glossary: bool = True  # Wiederkehrende Eigennamen vorab als Glossar erkennen
     first_start_done: bool = False
 
     def resolved_model_path(self) -> Path:
@@ -159,6 +181,10 @@ def load_settings(path: Path | None = None) -> Settings:
         settings.ocr_backend = "local"
     if settings.theme not in ("seasonal", "light", "dark"):
         settings.theme = "seasonal"
+    if settings.source_lang not in SOURCE_LANG_IDS:
+        settings.source_lang = "auto"
+    if settings.style_profile not in STYLE_PROFILE_IDS:
+        settings.style_profile = "literary"
     return settings
 
 

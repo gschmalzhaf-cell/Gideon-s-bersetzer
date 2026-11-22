@@ -143,3 +143,112 @@ def test_summarize_queue(tmp_path):
     assert summary.total_bytes == 10
     assert summary.cached_count == 1
     assert summary.missing_count == 1
+
+
+def test_detect_language_french_spanish_italian():
+    fr = "Il était une fois un petit garçon qui habitait dans une grande maison près de la forêt avec ses amis."
+    es = "Había una vez un niño pequeño que vivía en una casa grande cerca del bosque con sus amigos y su familia."
+    it = "C'era una volta un piccolo ragazzo che viveva in una grande casa vicino alla foresta con i suoi amici."
+    assert intelligence.detect_language(fr) == "fr"
+    assert intelligence.detect_language(es) == "es"
+    assert intelligence.detect_language(it) == "it"
+    assert intelligence.resolve_source_language("auto", fr) == "fr"
+    assert intelligence.resolve_source_language("es", fr) == "es"
+
+
+def test_extract_auto_glossary_and_merge():
+    texts = [
+        "Yesterday Sherlock Holmes walked down Baker Street with Watson.",
+        "Later Sherlock Holmes returned to Baker Street in the rain.",
+        "Everyone knew Sherlock Holmes lived on Baker Street near London.",
+    ]
+    auto = intelligence.extract_auto_glossary(texts, min_occurrences=3)
+    terms = [t for t, _ in auto]
+    assert "Sherlock Holmes" in terms
+    assert "Baker Street" in terms
+    # Nutzer-Glossar hat immer Vorrang
+    merged = intelligence.merge_glossaries([("Baker Street", "Bäckerstraße")], auto)
+    assert dict(merged)["Baker Street"] == "Bäckerstraße"
+    assert dict(merged)["Sherlock Holmes"] == "Sherlock Holmes"
+
+
+def test_style_profiles_and_multilang_prompts():
+    from gideons_uebersetzer.translator_base import build_messages, build_system_prompt
+
+    p_tech = build_system_prompt("technical", "fr")
+    assert "französischen" in p_tech
+    assert "Fachbegriffe" in p_tech
+
+    p_nonf = build_system_prompt("nonfiction", "es")
+    assert "spanischen" in p_nonf
+    assert "Sachbuch" in p_nonf
+
+    msgs = build_messages("Bonjour le monde.", [], [], fmt="translategemma", style_profile="technical", source_lang="fr")
+    assert msgs[0]["content"][0]["source_lang_code"] == "fr"
+    assert "Fachbuch" in msgs[0]["content"][0]["text"]
+
+    # Französische Stoppwort-Prüfung
+    fr_untranslated = "Le petit prince est dans la maison avec ses amis pour la nuit et il était très heureux."
+    assert quality_check(fr_untranslated, fr_untranslated, source_lang="fr") is not None
+
+
+def test_bilingual_epub_output(tmp_path, sample_pdf):
+    book = pdf_reader.extract_book(sample_pdf)
+    chunks = split_into_chunks(book.chapters, 60)
+    translations = {c.index: f"Übersetzter Abschnitt {c.index}." for c in chunks}
+    out = tmp_path / epub_builder.output_filename(book.title, bilingual=True)
+    assert out.name.endswith("(zweisprachig).epub")
+    res = epub_builder.build_epub(book, chunks, translations, out, bilingual=True)
+    assert res.path.is_file()
+    with zipfile.ZipFile(res.path) as zf:
+        chap0 = zf.read("EPUB/chap_0.xhtml").decode("utf-8")
+        title = zf.read("EPUB/titlepage.xhtml").decode("utf-8")
+    assert 'class="bilingual-pair"' in chap0
+    assert 'class="source-para"' in chap0
+    assert 'class="target-para"' in chap0
+    assert "Zweisprachige Ausgabe" in title
+
+
+def test_pipeline_retry_failed_only(tmp_path, sample_pdf):
+    calls = []
+
+    class FirstFailChunk0Translator:
+        def __init__(self, fail_first_chunk: bool):
+            self.fail_first_chunk = fail_first_chunk
+
+        def translate_stream(self, messages, temperature, on_token=None, cancel_event=None):
+            prompt = messages[1]["content"]
+            calls.append(prompt)
+            if self.fail_first_chunk and len(calls) <= 3:
+                return "", 0  # Chunk 0 schlägt 3x fehl
+            return ("Deutscher Übersetzungstext für diesen Abschnitt. " * 10)[:350], 50
+
+    book = pdf_reader.extract_book(sample_pdf)
+    s = settings_mod.Settings(chunk_size=40, output_dir=str(tmp_path))
+    cache_file = TranslationCache.cache_file_for(sample_pdf, tmp_path)
+    cache = TranslationCache(sample_pdf, cache_file)
+
+    # Lauf 1: Chunk 0 schlägt fehl -> Cache bleibt erhalten!
+    pipe1 = TranslationPipeline(
+        book=book, translator=FirstFailChunk0Translator(True), settings=s, cache=cache,
+        listener=PipelineListener(), cancel_event=threading.Event(),
+    )
+    res1 = pipe1.run()
+    assert res1.chunks_failed == 1
+    assert cache_file.is_file()
+
+    # Lauf 2: gezielt nur fehlgeschlagene nachübersetzen -> erledigte Chunks werden nicht neu übersetzt
+    calls.clear()
+    loaded = TranslationCache.load(sample_pdf, base_dir=tmp_path)
+    assert loaded is not None and loaded.failed_count == 1
+    pipe2 = TranslationPipeline(
+        book=book, translator=FirstFailChunk0Translator(False), settings=s, cache=loaded,
+        listener=PipelineListener(), cancel_event=threading.Event(), retry_failed=True,
+    )
+    res2 = pipe2.run()
+    assert res2.chunks_failed == 0
+    assert res2.chunks_done == res2.chunks_total
+    # Nur 1 fehlgeschlagener Chunk + ggf. 1 Kapitelüberschriften-Aufruf
+    assert len(calls) <= 2
+    assert not cache_file.exists()  # jetzt komplett -> Cache wird geleert
+

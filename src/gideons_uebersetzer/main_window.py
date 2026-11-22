@@ -46,7 +46,15 @@ from . import intelligence, model_manager, pdf_reader, report as report_mod
 from . import theme as theme_mod
 from .cache import TranslationCache
 from .pipeline import CancelledError, PipelineListener, TranslationPipeline
-from .settings import LEGACY_HF_FILENAMES, MODEL_PRESETS, Settings, model_preset_index, save_settings
+from .settings import (
+    LEGACY_HF_FILENAMES,
+    MODEL_PRESETS,
+    SOURCE_LANGUAGES,
+    STYLE_PROFILES,
+    Settings,
+    model_preset_index,
+    save_settings,
+)
 from .translator_base import load_glossary
 from .wizard import DownloadWorker, FirstStartWizard
 
@@ -75,11 +83,12 @@ class _Worker(QThread):
     failed = Signal(str)
     cancelled = Signal()
 
-    def __init__(self, paths, settings: Settings, parent=None, resume: bool = True):
+    def __init__(self, paths, settings: Settings, parent=None, resume: bool = True, retry_failed: bool = False):
         super().__init__(parent)
         self.paths = [Path(p) for p in paths]
         self.settings = settings
         self.resume = resume
+        self.retry_failed = retry_failed
         self.cancel_event = threading.Event()
         self._translator = None
 
@@ -150,7 +159,7 @@ class _Worker(QThread):
                         self.log.emit(
                             f"Dokument geladen: {book.title} – {book.word_count} Wörter, {len(book.chapters)} Kapitel erkannt."
                         )
-                    cache = TranslationCache.load(doc_path) if self.resume else None
+                    cache = TranslationCache.load(doc_path) if (self.resume or self.retry_failed) else None
                     if cache is not None:
                         self.log.emit(f"Zwischenspeicher für „{doc_path.name}“ gefunden – wird fortgesetzt.")
                     else:
@@ -165,6 +174,7 @@ class _Worker(QThread):
                         cancel_event=self.cancel_event,
                         glossary=load_glossary(self.settings.glossary_path),
                         cover_png=cover,
+                        retry_failed=self.retry_failed,
                     )
                     result = pipeline.run()
                     results.append({"path": doc_path, "ok": True, "result": result, "error": None})
@@ -284,6 +294,13 @@ class SettingsDialog(QDialog):
         idx = next((i for i, (tid, _l) in enumerate(theme_mod.THEME_CHOICES) if tid == settings.theme), 0)
         self.cmb_theme.setCurrentIndex(idx)
         form_look.addRow("Design:", self.cmb_theme)
+
+        self.cmb_source_lang = QComboBox()
+        for sid, label in SOURCE_LANGUAGES:
+            self.cmb_source_lang.addItem(label, sid)
+        s_idx = next((i for i, (sid, _l) in enumerate(SOURCE_LANGUAGES) if sid == settings.source_lang), 0)
+        self.cmb_source_lang.setCurrentIndex(s_idx)
+        form_look.addRow("Ausgangssprache:", self.cmb_source_lang)
 
         out_row = QHBoxLayout()
         self.txt_output = QLineEdit(str(settings.resolved_output_dir()))
@@ -410,6 +427,21 @@ class SettingsDialog(QDialog):
 
         grp_quality = QGroupBox("Übersetzungs-Feineinstellungen")
         form_quality = QFormLayout(grp_quality)
+
+        self.cmb_style = QComboBox()
+        for pid, label in STYLE_PROFILES:
+            self.cmb_style.addItem(label, pid)
+        st_idx = next((i for i, (pid, _l) in enumerate(STYLE_PROFILES) if pid == settings.style_profile), 0)
+        self.cmb_style.setCurrentIndex(st_idx)
+        form_quality.addRow("Stil-Profil:", self.cmb_style)
+
+        self.chk_auto_glossary = QCheckBox("Automatisches Buch-Glossar (Eigennamen & Begriffe vorab erkennen)")
+        self.chk_auto_glossary.setChecked(settings.auto_glossary)
+        form_quality.addRow("Auto-Glossar:", self.chk_auto_glossary)
+
+        self.chk_bilingual = QCheckBox("Zweisprachiges EPUB erzeugen (Original & Deutsch untereinander)")
+        self.chk_bilingual.setChecked(settings.bilingual)
+        form_quality.addRow("Ausgabeformat:", self.chk_bilingual)
 
         self.spin_temp = QDoubleSpinBox()
         self.spin_temp.setRange(0.0, 1.0)
@@ -568,6 +600,10 @@ class SettingsDialog(QDialog):
     def _accept(self) -> None:
         s = self.settings
         s.theme = self.cmb_theme.currentData()
+        s.source_lang = self.cmb_source_lang.currentData()
+        s.style_profile = self.cmb_style.currentData()
+        s.auto_glossary = self.chk_auto_glossary.isChecked()
+        s.bilingual = self.chk_bilingual.isChecked()
         s.tool = self.cmb_tool.currentData()
         s.online_enabled = self.chk_online.isChecked()
         s.api_key = self.txt_api_key.text().strip()
@@ -587,12 +623,13 @@ class SettingsDialog(QDialog):
 
 
 class SummaryDialog(QDialog):
-    """Zusammenfassung nach Abschluss inkl. Verbrauch (API) und Ablageordner-Knopf."""
+    """Zusammenfassung nach Abschluss inkl. Verbrauch (API), Ablageordner und Nachübersetzen."""
 
     def __init__(self, result, tool: str, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Übersetzung abgeschlossen")
-        self.resize(540, 320)
+        self.resize(560, 330)
+        self.retry_requested = False
         layout = QVBoxLayout(self)
 
         grp = QGroupBox("Ergebnis Ihres Tolino-EPUBs")
@@ -606,12 +643,21 @@ class SummaryDialog(QDialog):
         if tool == "api":
             lines.append(f"• An Mistral gesendete Zeichen: {result.chars_sent} (für die Kostenschätzung)")
         lines.append(f"\nGespeichert unter:\n{result.output_path}")
+        if result.chunks_failed > 0:
+            lines.append(
+                "\nHinweis: Der Zwischenspeicher wurde behalten – Sie können die fehlgeschlagenen "
+                "Abschnitte jetzt gezielt nachübersetzen."
+            )
         text.setText("\n".join(lines))
         text.setWordWrap(True)
         grp_layout.addWidget(text)
         layout.addWidget(grp, 1)
 
         row = QHBoxLayout()
+        if result.chunks_failed > 0:
+            self.btn_retry = QPushButton("Fehlgeschlagene nachübersetzen")
+            self.btn_retry.clicked.connect(self._request_retry)
+            row.addWidget(self.btn_retry)
         row.addStretch(1)
         btn_open = QPushButton("Ablageordner öffnen")
         btn_open.setObjectName("primaryButton")
@@ -622,6 +668,10 @@ class SummaryDialog(QDialog):
         row.addWidget(btn_close)
         layout.addLayout(row)
         self._result = result
+
+    def _request_retry(self) -> None:
+        self.retry_requested = True
+        self.accept()
 
     def _open_folder(self) -> None:
         folder = str(Path(self._result.output_path).parent)
@@ -650,7 +700,7 @@ class MainWindow(QMainWindow):
         title_col.setSpacing(2)
         self.lbl_title = QLabel("Gideon's Übersetzer")
         self.lbl_title.setObjectName("headerTitle")
-        self.lbl_subtitle = QLabel("Englische Bücher (PDF, EPUB, DOCX) ins Deutsche übersetzen → Tolino-EPUB")
+        self.lbl_subtitle = QLabel("Bücher (PDF, EPUB, DOCX) in EN/FR/ES/IT lokal ins Deutsche übersetzen → Tolino-EPUB")
         self.lbl_subtitle.setObjectName("headerSubtitle")
         title_col.addWidget(self.lbl_title)
         title_col.addWidget(self.lbl_subtitle)
@@ -1022,14 +1072,20 @@ class MainWindow(QMainWindow):
             )
             resume = answer == QMessageBox.Yes
 
+        self._start_worker(paths, resume=resume, retry_failed=False)
+
+    def _start_worker(self, paths: list[Path], resume: bool = True, retry_failed: bool = False) -> None:
         self.txt_preview.clear()
         self.txt_log.clear()
         self.progress.setValue(0)
         self.btn_start.setEnabled(False)
         self.btn_cancel.setEnabled(True)
-        self.lbl_status.setText(f"Warteschlange: {len(paths)} Dokument(e) …")
+        if retry_failed:
+            self.lbl_status.setText(f"Fehlgeschlagene Abschnitte nachübersetzen: {paths[0].name} …")
+        else:
+            self.lbl_status.setText(f"Warteschlange: {len(paths)} Dokument(e) …")
 
-        self._worker = _Worker(paths, self.settings, self, resume=resume)
+        self._worker = _Worker(paths, self.settings, self, resume=resume, retry_failed=retry_failed)
         w = self._worker
         w.log.connect(self._on_worker_log)
         w.status.connect(self.lbl_status.setText)
@@ -1067,9 +1123,12 @@ class MainWindow(QMainWindow):
         self.lbl_status.setText(f"Fertig: {len(ok)}/{len(results)} erfolgreich.")
         if len(results) == 1 and ok:
             result = ok[0]["result"]
+            doc_path = ok[0]["path"]
             self.txt_log.appendPlainText("EPUB geschrieben: " + str(result.output_path))
             dlg = SummaryDialog(result, self.settings.tool, self)
             dlg.exec()
+            if dlg.retry_requested:
+                self._start_worker([doc_path], resume=True, retry_failed=True)
             return
         lines = []
         for r in results:

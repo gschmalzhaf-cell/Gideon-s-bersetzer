@@ -30,6 +30,10 @@ CSS = (
     ".titlepage h1 { font-size: 1.8em; }\n"
     ".titlepage .note { font-style: italic; margin-top: 2em; }\n"
     ".failed-note { font-style: italic; color: #555; }\n"
+    ".bilingual-pair { margin: 0 0 1.1em 0; }\n"
+    ".source-para { font-size: 0.9em; font-style: italic; color: #555; "
+    "border-left: 2px solid #bbb; padding-left: 0.7em; margin: 0 0 0.35em 0; }\n"
+    ".target-para { margin: 0 0 0.4em 0; }\n"
 )
 
 def to_german_quotes(text: str) -> str:
@@ -51,8 +55,9 @@ def sanitize_filename(name: str) -> str:
     return cleaned or "buch"
 
 
-def output_filename(original_title: str) -> str:
-    return f"{sanitize_filename(original_title)} (deutsch).epub"
+def output_filename(original_title: str, bilingual: bool = False) -> str:
+    suffix = "(zweisprachig)" if bilingual else "(deutsch)"
+    return f"{sanitize_filename(original_title)} {suffix}.epub"
 
 
 def _paragraphs_to_html(text: str) -> str:
@@ -66,6 +71,33 @@ def _paragraphs_to_html(text: str) -> str:
         para = para.replace("\n", "<br/>")
         parts.append(f"<p>{para}</p>")
     return "\n".join(parts)
+
+
+def _bilingual_to_html(source_text: str, translated_text: str) -> str:
+    """Stellt Original- und Übersetzungsabsätze paarweise untereinander dar."""
+    src_paras = [p.strip() for p in re.split(r"\n\s*\n", source_text.strip()) if p.strip()]
+    tgt_paras = [p.strip() for p in re.split(r"\n\s*\n", translated_text.strip()) if p.strip()]
+    if len(src_paras) == len(tgt_paras) and src_paras:
+        blocks: list[str] = []
+        for s_p, t_p in zip(src_paras, tgt_paras):
+            s_html = html.escape(s_p, quote=False).replace("\n", "<br/>")
+            t_html = html.escape(to_german_quotes(t_p), quote=False).replace("\n", "<br/>")
+            blocks.append(
+                '<div class="bilingual-pair">\n'
+                f'  <p class="source-para">{s_html}</p>\n'
+                f'  <p class="target-para">{t_html}</p>\n'
+                "</div>"
+            )
+        return "\n".join(blocks)
+    # Fallback bei abweichender Absatzzahl: Originalblock gefolgt von deutschem Block
+    s_html = "\n".join(
+        f'<p class="source-para">{html.escape(p, quote=False).replace(chr(10), "<br/>")}</p>' for p in src_paras
+    )
+    t_html = "\n".join(
+        f'<p class="target-para">{html.escape(to_german_quotes(p), quote=False).replace(chr(10), "<br/>")}</p>'
+        for p in tgt_paras
+    )
+    return f'<div class="bilingual-pair">\n{s_html}\n{t_html}\n</div>'
 
 
 def _xhtml(title: str, body_html: str) -> str:
@@ -96,6 +128,7 @@ def build_epub(
     title_de: str | None = None,
     cover_png: bytes | None = None,
     chapter_titles_de: dict[int, str] | None = None,
+    bilingual: bool = False,
 ) -> EpubResult:
     """Erzeugt die EPUB-Datei. translations[index] = None erzeugt eine Notiz im Kapitel."""
     out_path = Path(out_path)
@@ -126,12 +159,17 @@ def build_epub(
         epub_book.set_cover("cover.png", cover_png)
 
     # Titelseite
+    note_text = (
+        "Zweisprachige Ausgabe (Original &amp; Deutsch), automatisch erstellt"
+        if bilingual
+        else "Deutsche Übersetzung, automatisch erstellt"
+    )
     title_html = _xhtml(
         title_de,
         '<div class="titlepage">\n'
         f"<h1>{html.escape(title_de)}</h1>\n"
         f"<p>{html.escape(book.author or 'Unbekannt')}</p>\n"
-        '<p class="note">Deutsche Übersetzung, automatisch erstellt</p>\n'
+        f'<p class="note">{note_text}</p>\n'
         "</div>",
     )
     title_item = epub.EpubHtml(uid="titlepage", file_name="titlepage.xhtml", lang="de")
@@ -145,6 +183,8 @@ def build_epub(
         translation = translations.get(chunk.index)
         if translation is None:
             chapter_texts[chunk.chapter_index].append(f'<p class="failed-note">{FAILED_NOTE}</p>')
+        elif bilingual:
+            chapter_texts[chunk.chapter_index].append(_bilingual_to_html(chunk.text, translation))
         else:
             chapter_texts[chunk.chapter_index].append(_paragraphs_to_html(translation))
 

@@ -158,6 +158,14 @@ def _cmd_uebersetzen(args) -> int:
         settings.chunk_size = args.chunk_size
     if args.temperature is not None:
         settings.temperature = args.temperature
+    if args.source_lang:
+        settings.source_lang = args.source_lang
+    if args.style:
+        settings.style_profile = args.style
+    if args.bilingual:
+        settings.bilingual = True
+    if args.no_auto_glossary:
+        settings.auto_glossary = False
 
     ocr = not args.no_ocr and settings.ocr_enabled
     if not ocr:
@@ -213,7 +221,7 @@ def _cmd_uebersetzen(args) -> int:
                 translator, tool = built
 
             cache = TranslationCache.load(doc_path)
-            if cache is not None and not args.no_resume:
+            if cache is not None and not args.no_resume and not args.retry_failed:
                 answer = input(f"Es existiert ein Zwischenspeicher für {doc_path.name}. Übersetzung fortsetzen? [J/n] ")
                 if answer.strip().lower() not in ("", "j", "ja", "y", "yes"):
                     cache = None
@@ -233,6 +241,7 @@ def _cmd_uebersetzen(args) -> int:
                 cancel_event=threading.Event(),
                 glossary=load_glossary(settings.glossary_path),
                 cover_png=cover,
+                retry_failed=args.retry_failed,
             )
             try:
                 result = pipeline.run()
@@ -332,6 +341,16 @@ def main(argv: list[str] | None = None) -> int:
     p_tr.add_argument("--ocr-backend", choices=["local", "mistral"], default=None,
                       help="OCR-Backend für Scans (Standard: aus Einstellungen). 'mistral' nur im Online-Betrieb – "
                            "Seitenbilder werden dann an Mistral gesendet")
+    p_tr.add_argument("--source-lang", choices=["auto", "en", "fr", "es", "it"], default=None,
+                      help="Ausgangssprache (Standard: aus Einstellungen, meist 'auto')")
+    p_tr.add_argument("--style", choices=["literary", "nonfiction", "technical"], default=None,
+                      help="Stil-Profil: literary (Roman), nonfiction (Sachbuch), technical (Fachbuch)")
+    p_tr.add_argument("--bilingual", action="store_true",
+                      help="Zweisprachiges EPUB erzeugen (Original & Deutsch untereinander)")
+    p_tr.add_argument("--no-auto-glossary", action="store_true",
+                      help="Automatisches Buch-Glossar für Eigennamen deaktivieren")
+    p_tr.add_argument("--retry-failed", action="store_true",
+                      help="Gezielt nur zuvor fehlgeschlagene Abschnitte aus dem Zwischenspeicher nachübersetzen")
     p_tr.set_defaults(func=_cmd_uebersetzen)
 
     p_rep = sub.add_parser("report", help="Diagnose-Report (Markdown + JSON-Anhang) erstellen")

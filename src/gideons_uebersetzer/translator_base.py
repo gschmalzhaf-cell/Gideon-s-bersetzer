@@ -17,6 +17,31 @@ SYSTEM_PROMPT = (
     "Text, keine Erklärungen. Behalte die Absatzstruktur des Originals bei."
 )
 
+_SOURCE_LANG_ADJECTIVE = {
+    "en": "englischen",
+    "fr": "französischen",
+    "es": "spanischen",
+    "it": "italienischen",
+}
+
+_STYLE_INSTRUCTIONS = {
+    "literary": (
+        "Du bist ein professioneller Literaturübersetzer. Übersetze den folgenden "
+        "{lang_adj} Text flüssig, stilvoll und natürlich klingend ins Deutsche "
+        "(authentische Dialoge, literarischer Erzählton)."
+    ),
+    "nonfiction": (
+        "Du bist ein professioneller Sachbuch-Übersetzer. Übersetze den folgenden "
+        "{lang_adj} Text klar, präzise und gut verständlich ins Deutsche "
+        "(sachlicher, strukturierter Stil)."
+    ),
+    "technical": (
+        "Du bist ein professioneller Fachübersetzer für Technik und Wissenschaft. "
+        "Übersetze den folgenden {lang_adj} Text exakt und terminologisch konsistent ins Deutsche; "
+        "etablierte Fachbegriffe, Code-Bezeichner und Produktnamen bleiben unverändert."
+    ),
+}
+
 # Modell-Antworten und Prompt-Reste, die im Ergebnis nicht vorkommen dürfen.
 FORBIDDEN_MARKERS = (
     "hier ist die übersetzung",
@@ -31,13 +56,30 @@ FORBIDDEN_MARKERS = (
     "zu übersetzender text",
 )
 
-# Häufige englische Stoppwörter; ein hoher Anteil deutet auf nicht übersetzten Text hin.
+# Häufige Stoppwörter je Ausgangssprache; ein hoher Anteil deutet auf nicht übersetzten Text hin.
 ENGLISH_STOPWORDS = {
     "the", "and", "of", "to", "in", "that", "is", "was", "it", "for", "on", "with",
     "as", "at", "by", "an", "be", "this", "which", "or", "from", "but", "not",
     "are", "were", "they", "he", "she", "his", "her", "you", "we", "i",
 }
+SOURCE_STOPWORDS = {
+    "en": ENGLISH_STOPWORDS,
+    "fr": {"le", "la", "les", "des", "une", "est", "dans", "que", "qui", "pour", "pas", "avec", "plus", "mais", "nous", "vous", "cette", "était"},
+    "es": {"el", "los", "las", "del", "una", "por", "para", "con", "pero", "como", "más", "este", "esta", "había", "todo", "muy", "porque"},
+    "it": {"il", "lo", "gli", "della", "una", "che", "non", "per", "con", "come", "più", "anche", "questo", "questa", "sono", "era", "molto"},
+}
 MAX_ENGLISH_STOPWORD_RATIO = 0.06
+
+
+def build_system_prompt(style_profile: str = "literary", source_lang: str = "en") -> str:
+    """Erzeugt den System-Prompt passend zu Stil-Profil und Ausgangssprache."""
+    lang_adj = _SOURCE_LANG_ADJECTIVE.get(source_lang, "englischen")
+    intro = _STYLE_INSTRUCTIONS.get(style_profile, _STYLE_INSTRUCTIONS["literary"]).format(lang_adj=lang_adj)
+    return (
+        f"{intro} Antworte ausschließlich mit der Übersetzung: "
+        "keine Einleitung, kein Kommentar, keine Anführungszeichen um den gesamten "
+        "Text, keine Erklärungen. Behalte die Absatzstruktur des Originals bei."
+    )
 
 
 @dataclass
@@ -165,6 +207,8 @@ def build_messages(
     glossary: list[tuple[str, str]],
     extra_hint: str = "",
     fmt: str = "default",
+    style_profile: str = "literary",
+    source_lang: str = "en",
 ) -> list[dict]:
     """Baut die Chat-Nachrichten für einen Übersetzungsaufruf.
 
@@ -174,6 +218,7 @@ def build_messages(
     strukturiertes user-content [{type, source_lang_code, target_lang_code, text}]
     (siehe Chat-Template des Modells); Glossar/Kontext/Hinweis landen im Textfeld.
     """
+    src_code = source_lang if source_lang in ("en", "fr", "es", "it") else "en"
     parts: list[str] = []
     if glossary:
         lines = "\n".join(f"- {term} = {translation}" for term, translation in glossary)
@@ -184,6 +229,13 @@ def build_messages(
             "Bisherige Übersetzung (nur als Kontext für einen flüssigen Anschluss, "
             f"nicht wiederholen):\n{context}"
         )
+    if fmt == "translategemma" and style_profile in ("nonfiction", "technical"):
+        style_note = (
+            "Stil: Sachbuch (klar, präzise, sachlich)."
+            if style_profile == "nonfiction"
+            else "Stil: Fachbuch/Technik (exakt, etablierte Fachbegriffe beibehalten)."
+        )
+        parts.append(style_note)
     if extra_hint:
         parts.append(extra_hint)
     parts.append(f'Zu übersetzender Text:\n"""\n{source_text}\n"""')
@@ -195,7 +247,7 @@ def build_messages(
                 "content": [
                     {
                         "type": "text",
-                        "source_lang_code": "en",
+                        "source_lang_code": src_code,
                         "target_lang_code": "de",
                         "text": body,
                     }
@@ -203,7 +255,7 @@ def build_messages(
             }
         ]
     return [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": build_system_prompt(style_profile, src_code)},
         {"role": "user", "content": "\n\n".join(parts)},
     ]
 
@@ -250,7 +302,7 @@ def sanitize_translation(text: str) -> str:
     return out.strip()
 
 
-def quality_check(source: str, translated: str) -> str | None:
+def quality_check(source: str, translated: str, source_lang: str = "en") -> str | None:
     """Prüft die Qualität eines übersetzten Abschnitts.
 
     Returns None bei bestandener Prüfung, sonst eine deutsche Beschreibung
@@ -270,7 +322,8 @@ def quality_check(source: str, translated: str) -> str | None:
             return f"Die Antwort enthält unerwünschten Text („{marker}“)."
     words = lowered.split()
     if words:
-        english = sum(1 for w in words if w.strip(".,;:!?\"'()[]«»") in ENGLISH_STOPWORDS)
-        if english / len(words) > MAX_ENGLISH_STOPWORD_RATIO:
-            return "Der Text wirkt nicht übersetzt (auffällig viele englische Wörter)."
+        stopwords = SOURCE_STOPWORDS.get(source_lang, ENGLISH_STOPWORDS)
+        foreign = sum(1 for w in words if w.strip(".,;:!?\"'()[]«»") in stopwords)
+        if foreign / len(words) > MAX_ENGLISH_STOPWORD_RATIO:
+            return "Der Text wirkt nicht übersetzt (auffällig viele Wörter der Ausgangssprache)."
     return None

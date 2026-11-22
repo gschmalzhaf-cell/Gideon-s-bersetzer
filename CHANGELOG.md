@@ -26,6 +26,38 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.4.0 – 2026-11-22
+
+### Neu
+- **Automatisches Buch-Glossar (`intelligence.py`, `pipeline.py`):** Scannt das Buch vorab
+  lokal nach wiederkehrenden Eigennamen und Orten (z. B. Figurennamen), damit diese über das
+  gesamte Buch hinweg einheitlich beibehalten werden. Eigene Glossar-Einträge haben stets
+  Vorrang; in den Einstellungen (*Qualität & OCR*) bzw. per CLI `--no-auto-glossary`
+  steuerbar.
+- **Stil- & Genre-Profile (`translator_base.py`, `settings.py`):** Wählbar in den
+  Einstellungen (*Qualität & OCR*) oder per CLI `--style`:
+  - *Roman / Belletristik* (flüssig, literarisch, natürliche Dialoge),
+  - *Sachbuch* (klar, präzise, sachlicher Stil),
+  - *Fachbuch / Technik* (exakt, etablierte Fachbegriffe bleiben erhalten).
+- **Zweisprachiges EPUB (schließt #2, `epub_builder.py`):** Neue Option *„Zweisprachiges
+  EPUB erzeugen“* (Einstellungen → *Qualität & OCR* bzw. CLI `--bilingual`). Stellt
+  Originalabsatz (dezent kursiv und eingerückt) und deutsche Übersetzung paarweise
+  untereinander dar (`<Titel> (zweisprachig).epub`).
+- **Gezieltes Nachübersetzen fehlgeschlagener Abschnitte (`pipeline.py`, `main_window.py`,
+  `cli.py`):** Bleiben Abschnitte fehlgeschlagen, wird der Zwischenspeicher ab sofort
+  behalten statt gelöscht. Im Abschluss-Dialog erscheint der Knopf **„Fehlgeschlagene
+  nachübersetzen“** (bzw. CLI `--retry-failed`), der gezielt nur diese Abschnitte erneut
+  übersetzt.
+- **Erweiterte Ausgangssprachen mit Auto-Erkennung (`intelligence.py`, `translator_base.py`):**
+  Neben Englisch werden jetzt auch **Französisch, Spanisch und Italienisch** als
+  Ausgangssprachen unterstützt (Standard: *Automatisch erkennen*, einstellbar in
+  *Allgemein & Modus* bzw. CLI `--source-lang`). Prompts, TranslateGemma-Sprachcode und
+  Qualitätsprüfung passen sich automatisch an.
+
+### Geändert
+- **README.md & ROADMAP.md aktualisiert:** Neue v1.4.0-Funktionen, CLI-Beispiele und
+  abgeschlossenes Issue #2 dokumentiert.
+
 ## v1.3.0 – 2026-11-22
 
 ### Neu

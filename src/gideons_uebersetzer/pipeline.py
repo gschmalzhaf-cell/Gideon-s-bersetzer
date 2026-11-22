@@ -85,6 +85,7 @@ class TranslationPipeline:
         glossary: list[tuple[str, str]] | None = None,
         output_path: str | Path | None = None,
         cover_png: bytes | None = None,
+        retry_failed: bool = False,
     ):
         self.book = book
         self.translator = translator
@@ -92,11 +93,31 @@ class TranslationPipeline:
         self.cache = cache
         self.listener = listener or PipelineListener()
         self.cancel_event = cancel_event or threading.Event()
-        self.glossary = glossary if glossary is not None else load_glossary(settings.glossary_path)
+        self.retry_failed = retry_failed
+        user_glossary = glossary if glossary is not None else load_glossary(settings.glossary_path)
         self.chunks = split_into_chunks(book.chapters, settings.chunk_size)
+
+        # Automatisches Buch-Glossar (Eigennamen/Orte vorab extrahieren, Nutzer-Glossar hat Vorrang)
+        if getattr(settings, "auto_glossary", True):
+            auto_entries = intelligence.extract_auto_glossary([c.text for c in self.chunks])
+            self.auto_glossary_count = len(auto_entries)
+            self.glossary = intelligence.merge_glossaries(user_glossary, auto_entries)
+        else:
+            self.auto_glossary_count = 0
+            self.glossary = list(user_glossary)
+
+        # Ausgangssprache bestimmen (auto -> en/fr/es/it)
+        sample_text = " ".join(c.text for c in self.chunks[:2])[:1800]
+        self._sample_text = sample_text
+        self.source_lang = intelligence.resolve_source_language(
+            getattr(settings, "source_lang", "auto"), sample_text
+        )
+        self.style_profile = getattr(settings, "style_profile", "literary")
+        self.bilingual = bool(getattr(settings, "bilingual", False))
+
         if output_path is None:
             out_dir = settings.resolved_output_dir()
-            output_path = out_dir / epub_builder.output_filename(book.title)
+            output_path = out_dir / epub_builder.output_filename(book.title, bilingual=self.bilingual)
         self.output_path = Path(output_path)
         self.cover_png = cover_png
 
@@ -112,7 +133,15 @@ class TranslationPipeline:
         for attempt in range(1 + MAX_RETRIES):
             if self._cancelled():
                 raise CancelledError("Übersetzung abgebrochen.")
-            messages = build_messages(chunk.text, context, relevant_glossary, extra_hint=hint, fmt=fmt)
+            messages = build_messages(
+                chunk.text,
+                context,
+                relevant_glossary,
+                extra_hint=hint,
+                fmt=fmt,
+                style_profile=self.style_profile,
+                source_lang=self.source_lang,
+            )
             # Wiederholungen deterministisch (Temperatur 0), damit ein einmaliger
             # Aussetzer nicht dreimal reproduziert wird.
             temperature = self.settings.temperature if attempt == 0 else 0.0
@@ -127,7 +156,7 @@ class TranslationPipeline:
             else:
                 translation, chars = result, 0
             translation = sanitize_translation(translation)
-            problem = quality_check(chunk.text, translation)
+            problem = quality_check(chunk.text, translation, source_lang=self.source_lang)
             if problem is None:
                 return translation, chars
             last_problem = problem
@@ -142,7 +171,7 @@ class TranslationPipeline:
         raise ChunkFailedError(last_problem or "Unbekannter Fehler")
 
     def _translate_chapter_titles(self) -> tuple[dict[int, str], int]:
-        """Übersetzt erkannte englische Kapitelüberschriften gebündelt in einem Aufruf.
+        """Übersetzt erkannte Kapitelüberschriften gebündelt in einem Aufruf.
 
         Fällt bei Fehlern oder unvollständigem Format geräuschlos auf die Original-Überschriften zurück.
         """
@@ -159,7 +188,15 @@ class TranslationPipeline:
         for attempt in range(1 + MAX_RETRIES):
             if self._cancelled():
                 raise CancelledError("Übersetzung abgebrochen.")
-            messages = build_messages(block, [], self.glossary[:10], extra_hint=hint, fmt=fmt)
+            messages = build_messages(
+                block,
+                [],
+                self.glossary[:10],
+                extra_hint=hint,
+                fmt=fmt,
+                style_profile=self.style_profile,
+                source_lang=self.source_lang,
+            )
             try:
                 res = self.translator.translate_stream(
                     messages,
@@ -200,11 +237,17 @@ class TranslationPipeline:
         translations: dict[int, str | None] = {}
         chars_sent = 0
 
-        # Vorab-Spracherkennung auf den ersten Abschnitten
-        sample_text = " ".join(c.text for c in self.chunks[:2])[:1800]
-        if intelligence.is_likely_german(sample_text):
+        # Vorab-Spracherkennung & Hinweise
+        if intelligence.is_likely_german(self._sample_text):
             self.listener.on_log(
                 "Hinweis: Der Quelltext wirkt bereits überwiegend deutsch – bitte prüfen, ob das richtige Dokument gewählt wurde."
+            )
+        else:
+            lang_name = intelligence.LANGUAGE_NAMES_DE.get(self.source_lang, self.source_lang)
+            self.listener.on_log(f"Ausgangssprache: {lang_name} · Stil-Profil: {self.style_profile}")
+        if self.auto_glossary_count:
+            self.listener.on_log(
+                f"Auto-Glossar: {self.auto_glossary_count} wiederkehrende Begriffe/Eigennamen erkannt."
             )
 
         resumed = any(
@@ -214,7 +257,15 @@ class TranslationPipeline:
         self.listener.on_start(total, resumed)
         self.listener.on_log(
             f"{total} Abschnitte zu übersetzen"
-            + (" (Fortsetzung: bereits übersetzte Abschnitte werden aus dem Zwischenspeicher übernommen)." if resumed else ".")
+            + (
+                " (gezieltes Nachübersetzen fehlgeschlagener Abschnitte)."
+                if self.retry_failed
+                else (
+                    " (Fortsetzung: bereits übersetzte Abschnitte werden aus dem Zwischenspeicher übernommen)."
+                    if resumed
+                    else "."
+                )
+            )
         )
 
         context: list[str] = []
@@ -225,10 +276,16 @@ class TranslationPipeline:
             if self._cancelled():
                 raise CancelledError("Übersetzung abgebrochen.")
             cached = self.cache.get(chunk.index)
-            if cached is not None and cached.status in (STATUS_DONE, STATUS_FAILED):
-                translations[chunk.index] = cached.translation if cached.status == STATUS_DONE else None
-                done += 1
-                continue
+            if cached is not None:
+                if cached.status == STATUS_DONE:
+                    translations[chunk.index] = cached.translation
+                    context.extend(p for p in cached.translation.split("\n\n") if p.strip())
+                    done += 1
+                    continue
+                if cached.status == STATUS_FAILED and not self.retry_failed:
+                    translations[chunk.index] = None
+                    done += 1
+                    continue
 
             self.listener.on_chunk_start(chunk, done, total)
             chunk_started = time.monotonic()
@@ -296,8 +353,15 @@ class TranslationPipeline:
             title_de=title_de,
             cover_png=self.cover_png,
             chapter_titles_de=chapter_titles_de,
+            bilingual=self.bilingual,
         )
-        self.cache.clear()
+        if result.failed_chunks == 0:
+            self.cache.clear()
+        else:
+            self.listener.on_log(
+                f"Zwischenspeicher für {result.failed_chunks} fehlgeschlagene(n) Abschnitt(e) behalten – "
+                "gezieltes Nachübersetzen möglich."
+            )
         run_result = RunResult(
             output_path=result.path,
             pages=self.book.page_count,

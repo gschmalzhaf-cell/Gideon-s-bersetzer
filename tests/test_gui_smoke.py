@@ -178,3 +178,31 @@ def test_main_window_three_step_structure_and_tabs(qapp, tmp_path, monkeypatch):
     win.deleteLater()
     qapp.processEvents()
 
+
+def test_settings_and_summary_v140_controls(qapp, tmp_path):
+    dlg = SettingsDialog(Settings())
+    assert dlg.cmb_source_lang.currentData() == "auto"
+    assert dlg.cmb_style.currentData() == "literary"
+    assert dlg.chk_auto_glossary.isChecked()
+    assert not dlg.chk_bilingual.isChecked()
+    dlg.close()
+    dlg.deleteLater()
+    qapp.processEvents()
+
+    class FailedResult:
+        pages = 10
+        words = 2000
+        chunks_done = 2
+        chunks_failed = 1
+        chunks_total = 3
+        duration_seconds = 30
+        chars_sent = 0
+        output_path = tmp_path / "buch (deutsch).epub"
+
+    sdlg = SummaryDialog(FailedResult(), "offline")
+    assert hasattr(sdlg, "btn_retry")
+    sdlg.close()
+    sdlg.deleteLater()
+    qapp.processEvents()
+
+
