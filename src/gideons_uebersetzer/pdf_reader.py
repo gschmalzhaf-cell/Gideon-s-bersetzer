@@ -127,6 +127,68 @@ def _ocr_heading(text: str, prev_y: float | None, y: float, height: float) -> bo
     return prev_y is None  # erste Zeile der Seite
 
 
+def _normalize_margin_text(text: str) -> str:
+    """Normalisiert potenzielle Kopf-/Fußzeilen (Ziffern vereinheitlichen, Kleinschreibung)."""
+    return re.sub(r"\d+", "#", " ".join(text.split())).strip().lower()
+
+
+def _detect_running_headers_footers(pages_dicts: list[dict]) -> set[str]:
+    """Erkennt wiederkehrende Kopf- und Fußzeilen (Kolumnentitel) über mehrere Seiten.
+
+    Ein Text gilt als wiederkehrende Kopf-/Fußzeile, wenn er (nach Ziffern-Normalisierung)
+    auf mindestens 3 Seiten und mindestens 30 % der Textseiten im ersten oder letzten
+    Textblock der Seite vorkommt und höchstens 90 Zeichen lang ist.
+    """
+    text_pages = [d for d in pages_dicts if _page_has_text(d)]
+    if len(text_pages) < 3:
+        return set()
+    counts: Counter[str] = Counter()
+    for page in text_pages:
+        text_blocks: list[str] = []
+        for block in page.get("blocks", []):
+            if block.get("type", 0) != 0:
+                continue
+            lines = [_line_info(line)[0] for line in block.get("lines", [])]
+            lines = [t for t in lines if t]
+            if lines:
+                text_blocks.append(" ".join(lines))
+        if not text_blocks:
+            continue
+        candidates = {text_blocks[0], text_blocks[-1]}
+        seen_on_page: set[str] = set()
+        for cand in candidates:
+            if len(cand) > 90 or _PAGE_NUMBER_RE.match(cand):
+                continue
+            norm = _normalize_margin_text(cand)
+            if norm and norm not in seen_on_page:
+                counts[norm] += 1
+                seen_on_page.add(norm)
+    threshold = max(3, int(len(text_pages) * 0.3 + 0.999))
+    return {norm for norm, c in counts.items() if c >= threshold}
+
+
+def _join_lines(lines: list[str]) -> str:
+    """Fügt PDF-Zeilen zu einem Absatz zusammen und heilt Silbentrennungen am Zeilenende."""
+    if not lines:
+        return ""
+    out = lines[0].replace("\xad", "")
+    for nxt in lines[1:]:
+        nxt = nxt.replace("\xad", "")
+        if not nxt:
+            continue
+        # Klassische Silbentrennung am Zeilenende: „transla-“ + „tion“ -> „translation“
+        if (
+            out.endswith("-")
+            and len(out) >= 2
+            and out[-2].isalpha()
+            and nxt[0].islower()
+        ):
+            out = out[:-1] + nxt
+        else:
+            out = f"{out} {nxt}"
+    return " ".join(out.split())
+
+
 def extract_book(
     path: str | Path,
     ocr: bool = True,
@@ -170,6 +232,7 @@ def extract_book(
                 raise ScannedPdfError(index)
 
         body_size = _body_size([d for d in pages_dicts if _page_has_text(d)])
+        running_margins = _detect_running_headers_footers(pages_dicts)
         chapters: list[Chapter] = []
         current = Chapter(title=None)
         chapters.append(current)
@@ -207,7 +270,7 @@ def extract_book(
 
                 def flush_ocr() -> None:
                     nonlocal paragraph_parts, prev_y
-                    text = " ".join(paragraph_parts).strip()
+                    text = _join_lines(paragraph_parts).strip()
                     if text and not _PAGE_NUMBER_RE.match(text):
                         current.paragraphs.append(Paragraph(text, page_number))
                     paragraph_parts = []
@@ -231,6 +294,7 @@ def extract_book(
 
             if progress_cb is not None:
                 progress_cb(page_number, page_count, "Text")
+            text_blocks_raw = []
             for block in page_dict.get("blocks", []):
                 if block.get("type", 0) != 0:
                     continue
@@ -239,11 +303,18 @@ def extract_book(
                     text, size, bold = _line_info(line)
                     if text:
                         block_lines.append((text, size, bold))
-                if not block_lines:
-                    continue
+                if block_lines:
+                    text_blocks_raw.append(block_lines)
+
+            for b_idx, block_lines in enumerate(text_blocks_raw):
                 first_text, first_size, first_bold = block_lines[0]
                 if _PAGE_NUMBER_RE.match(first_text):
                     continue
+                # Wiederkehrende Kopf-/Fußzeilen am Seitenanfang/-ende überspringen
+                if running_margins and (b_idx == 0 or b_idx == len(text_blocks_raw) - 1):
+                    joined_block = " ".join(t for t, _, _ in block_lines)
+                    if _normalize_margin_text(joined_block) in running_margins:
+                        continue
                 is_heading = (
                     first_size > body_size * 1.15
                     or (first_bold and first_size >= body_size * 1.02 and len(first_text) <= 120)
@@ -251,11 +322,11 @@ def extract_book(
                 if is_heading:
                     current = Chapter(title=first_text)
                     chapters.append(current)
-                    rest = " ".join(t for t, _, _ in block_lines[1:])
+                    rest = _join_lines([t for t, _, _ in block_lines[1:]])
                     if rest:
                         current.paragraphs.append(Paragraph(rest, page_number))
                 else:
-                    text = " ".join(t for t, _, _ in block_lines)
+                    text = _join_lines([t for t, _, _ in block_lines])
                     current.paragraphs.append(Paragraph(text, page_number))
 
         chapters = [c for c in chapters if c.paragraphs or c.title]

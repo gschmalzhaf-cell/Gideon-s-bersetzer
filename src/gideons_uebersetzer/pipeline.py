@@ -14,7 +14,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import epub_builder, pdf_reader
+from . import epub_builder, intelligence, pdf_reader
 from .cache import STATUS_DONE, STATUS_FAILED, TranslationCache
 from .pdf_reader import PdfBook
 from .translator_base import (
@@ -108,10 +108,11 @@ class TranslationPipeline:
         hint = ""
         last_problem = None
         fmt = prompt_format_for(self.settings)
+        relevant_glossary = intelligence.filter_relevant_glossary(self.glossary, chunk.text)
         for attempt in range(1 + MAX_RETRIES):
             if self._cancelled():
                 raise CancelledError("Übersetzung abgebrochen.")
-            messages = build_messages(chunk.text, context, self.glossary, extra_hint=hint, fmt=fmt)
+            messages = build_messages(chunk.text, context, relevant_glossary, extra_hint=hint, fmt=fmt)
             # Wiederholungen deterministisch (Temperatur 0), damit ein einmaliger
             # Aussetzer nicht dreimal reproduziert wird.
             temperature = self.settings.temperature if attempt == 0 else 0.0
@@ -140,12 +141,71 @@ class TranslationPipeline:
             )
         raise ChunkFailedError(last_problem or "Unbekannter Fehler")
 
+    def _translate_chapter_titles(self) -> tuple[dict[int, str], int]:
+        """Übersetzt erkannte englische Kapitelüberschriften gebündelt in einem Aufruf.
+
+        Fällt bei Fehlern oder unvollständigem Format geräuschlos auf die Original-Überschriften zurück.
+        """
+        indexed = [(i, ch.title.strip()) for i, ch in enumerate(self.book.chapters) if ch.title and ch.title.strip()]
+        if not indexed:
+            return {}, 0
+        block = intelligence.build_headings_block([t for _, t in indexed])
+        fmt = prompt_format_for(self.settings)
+        hint = (
+            "Übersetze jede nummerierte Kapitelüberschrift ins Deutsche und behalte exakt das "
+            "Nummerierungsformat '[1] ...', '[2] ...' zeilenweise bei."
+        )
+        chars_total = 0
+        for attempt in range(1 + MAX_RETRIES):
+            if self._cancelled():
+                raise CancelledError("Übersetzung abgebrochen.")
+            messages = build_messages(block, [], self.glossary[:10], extra_hint=hint, fmt=fmt)
+            try:
+                res = self.translator.translate_stream(
+                    messages,
+                    temperature=0.0,
+                    on_token=None,
+                    cancel_event=self.cancel_event,
+                )
+            except CancelledError:
+                raise
+            except Exception:
+                return {}, chars_total
+            if isinstance(res, tuple):
+                raw, chars = res
+            else:
+                raw, chars = res, 0
+            chars_total += chars
+            cleaned = sanitize_translation(raw)
+            if not cleaned:
+                continue
+            parsed = intelligence.parse_translated_headings(cleaned, len(indexed))
+            if parsed:
+                mapped = {indexed[k][0]: v for k, v in parsed.items()}
+                self.listener.on_log(f"{len(mapped)} Kapitelüberschrift(en) automatisch ins Deutsche übersetzt.")
+                return mapped, chars_total
+            # Fallback: wenn Modell ohne Nummerierung geantwortet hat, aber Zeilenanzahl passt
+            lines = [ln.strip() for ln in cleaned.splitlines() if ln.strip()]
+            if len(lines) == len(indexed):
+                mapped = {indexed[k][0]: lines[k] for k in range(len(indexed))}
+                self.listener.on_log(f"{len(mapped)} Kapitelüberschrift(en) automatisch ins Deutsche übersetzt.")
+                return mapped, chars_total
+            break
+        return {}, chars_total
+
     def run(self) -> RunResult:
         """Führt die Übersetzung aus. Liefert das Ergebnis; wirft CancelledError bei Abbruch."""
         started = time.monotonic()
         total = len(self.chunks)
         translations: dict[int, str | None] = {}
         chars_sent = 0
+
+        # Vorab-Spracherkennung auf den ersten Abschnitten
+        sample_text = " ".join(c.text for c in self.chunks[:2])[:1800]
+        if intelligence.is_likely_german(sample_text):
+            self.listener.on_log(
+                "Hinweis: Der Quelltext wirkt bereits überwiegend deutsch – bitte prüfen, ob das richtige Dokument gewählt wurde."
+            )
 
         resumed = any(
             (cached := self.cache.get(c.index)) is not None and cached.status == STATUS_DONE
@@ -218,13 +278,24 @@ class TranslationPipeline:
         if self._cancelled():
             raise CancelledError("Übersetzung abgebrochen.")
 
+        chapter_titles_de, heading_chars = self._translate_chapter_titles()
+        chars_sent += heading_chars
+
+        first_idx = next((i for i, ch in enumerate(self.book.chapters) if ch.title), None)
+        title_de = (
+            chapter_titles_de.get(first_idx)
+            if first_idx is not None
+            else None
+        ) or self.book.first_chapter_title or self.book.title
+
         result = epub_builder.build_epub(
             self.book,
             self.chunks,
             translations,
             self.output_path,
-            title_de=self.book.first_chapter_title or self.book.title,
+            title_de=title_de,
             cover_png=self.cover_png,
+            chapter_titles_de=chapter_titles_de,
         )
         self.cache.clear()
         run_result = RunResult(

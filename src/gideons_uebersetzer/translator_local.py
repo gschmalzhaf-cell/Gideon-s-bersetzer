@@ -67,7 +67,13 @@ class LocalTranslator:
         cancel_event=None,
     ) -> str:
         """Übersetzt eine Nachrichtenkette und ruft on_token je Textstück ab (Live-Vorschau)."""
-        source_chars = sum(len(m.get("content", "")) for m in messages)
+        source_chars = 0
+        for m in messages:
+            content = m.get("content", "")
+            if isinstance(content, str):
+                source_chars += len(content)
+            elif isinstance(content, list):
+                source_chars += sum(len(item.get("text", "")) for item in content if isinstance(item, dict))
         max_tokens = max(1024, min(4096, int(source_chars * 1.5) + 512))
         parts: list[str] = []
         stream = self.llm.create_chat_completion(

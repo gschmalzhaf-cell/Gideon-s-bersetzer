@@ -46,6 +46,7 @@ hiddenimports = [
     "gideons_uebersetzer.report",
     "gideons_uebersetzer.updater",
     "gideons_uebersetzer.theme",
+    "gideons_uebersetzer.intelligence",
     "huggingface_hub",
     "requests",
     "pymupdf",

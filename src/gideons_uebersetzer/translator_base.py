@@ -58,11 +58,38 @@ class CancelledError(Exception):
     """Wird ausgelöst, wenn der Anwender die Übersetzung abbricht."""
 
 
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?…»\"'])\s+(?=[A-ZÄÖÜ\"'«„(])")
+
+
+def _split_long_paragraph(text: str, max_words: int) -> list[str]:
+    """Teilt einen überlangen Absatz intelligent an Satzgrenzen (nie mitten im Satz)."""
+    if len(text.split()) <= max_words:
+        return [text]
+    sentences = _SENTENCE_SPLIT_RE.split(text.strip())
+    if len(sentences) <= 1:
+        return [text]
+    parts: list[str] = []
+    buf: list[str] = []
+    buf_words = 0
+    for sent in sentences:
+        sw = len(sent.split())
+        if buf and buf_words + sw > max_words:
+            parts.append(" ".join(buf))
+            buf = [sent]
+            buf_words = sw
+        else:
+            buf.append(sent)
+            buf_words += sw
+    if buf:
+        parts.append(" ".join(buf))
+    return parts
+
+
 def split_into_chunks(chapters: list[Chapter], chunk_words: int) -> list[Chunk]:
     """Gruppiert Absätze zu Abschnitten von etwa chunk_words Wörtern.
 
-    Absätze werden nicht mitten im Satz geteilt und Kapitelgrenzen werden
-    nicht überschritten.
+    Absätze werden nicht mitten im Satz geteilt (überlange Einzelabsätze werden
+    intelligent an Satzgrenzen zerlegt) und Kapitelgrenzen werden nie überschritten.
     """
     chunk_words = max(200, int(chunk_words))
     chunks: list[Chunk] = []
@@ -86,12 +113,13 @@ def split_into_chunks(chapters: list[Chapter], chunk_words: int) -> list[Chunk]:
             current_words = 0
 
         for paragraph in chapter.paragraphs:
-            words = len(paragraph.text.split())
-            if current_paragraphs and current_words + words > chunk_words:
-                flush()
-                current_page = paragraph.page
-            current_paragraphs.append(paragraph.text)
-            current_words += words
+            for piece in _split_long_paragraph(paragraph.text, chunk_words):
+                words = len(piece.split())
+                if current_paragraphs and current_words + words > chunk_words:
+                    flush()
+                    current_page = paragraph.page
+                current_paragraphs.append(piece)
+                current_words += words
         flush()
     return chunks
 
@@ -234,6 +262,8 @@ def quality_check(source: str, translated: str) -> str | None:
         return "Die Übersetzung ist leer."
     if src_len > 0 and len(out) < src_len * 0.25:
         return "Die Übersetzung ist auffällig kürzer als der Quelltext (weniger als ein Viertel)."
+    if src_len >= 120 and len(out) > max(src_len * 3.5, 600):
+        return "Die Übersetzung ist auffällig länger als der Quelltext (möglicherweise Halluzination oder Wiederholung)."
     lowered = out.lower()
     for marker in FORBIDDEN_MARKERS:
         if marker in lowered:

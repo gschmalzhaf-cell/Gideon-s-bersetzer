@@ -95,13 +95,19 @@ def build_epub(
     out_path: str | Path,
     title_de: str | None = None,
     cover_png: bytes | None = None,
+    chapter_titles_de: dict[int, str] | None = None,
 ) -> EpubResult:
     """Erzeugt die EPUB-Datei. translations[index] = None erzeugt eine Notiz im Kapitel."""
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    chapter_titles_de = chapter_titles_de or {}
 
     if title_de is None:
-        title_de = book.first_chapter_title or book.title
+        first_idx = next((i for i, ch in enumerate(book.chapters) if ch.title), None)
+        if first_idx is not None and first_idx in chapter_titles_de:
+            title_de = chapter_titles_de[first_idx]
+        else:
+            title_de = book.first_chapter_title or book.title
 
     failed = sum(1 for c in chunks if translations.get(c.index) is None)
 
@@ -145,10 +151,12 @@ def build_epub(
     toc_entries = [epub.Link("titlepage.xhtml", "Titel", "titlepage")]
     spine = [title_item]
     for i, chapter in enumerate(book.chapters):
-        title = chapter.title or f"Kapitel {i + 1}"
+        translated_heading = chapter_titles_de.get(i)
+        raw_title = translated_heading or chapter.title
+        title = raw_title or f"Kapitel {i + 1}"
         body = "\n".join(chapter_texts.get(i, [])) or "<p></p>"
-        if chapter.title:
-            body = f"<h1>{html.escape(chapter.title)}</h1>\n" + body
+        if raw_title:
+            body = f"<h1>{html.escape(raw_title)}</h1>\n" + body
         item = epub.EpubHtml(uid=f"chap{i}", file_name=f"chap_{i}.xhtml", lang="de", title=title)
         item.content = _xhtml(title, body)
         item.add_item(css_item)

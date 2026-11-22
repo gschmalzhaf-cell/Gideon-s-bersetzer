@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
     QWizardPage,
 )
 
-from . import model_manager
+from . import intelligence, model_manager
 from .settings import Settings, save_settings
 
 
@@ -76,6 +76,9 @@ class ModelPage(QWizardPage):
         grp_layout = QVBoxLayout(grp)
         self.info_label = QLabel()
         self.info_label.setWordWrap(True)
+        self.hw_label = QLabel(intelligence.recommend_model_preset().reason)
+        self.hw_label.setObjectName("hintLabel")
+        self.hw_label.setWordWrap(True)
         self.progress = QProgressBar()
         self.progress.setVisible(False)
         self.status_label = QLabel("")
@@ -90,6 +93,7 @@ class ModelPage(QWizardPage):
         self._thread = None
 
         grp_layout.addWidget(self.info_label)
+        grp_layout.addWidget(self.hw_label)
         grp_layout.addWidget(self.progress)
         grp_layout.addWidget(self.status_label)
         row = QHBoxLayout()

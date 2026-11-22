@@ -42,7 +42,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from . import model_manager, pdf_reader, report as report_mod
+from . import intelligence, model_manager, pdf_reader, report as report_mod
 from . import theme as theme_mod
 from .cache import TranslationCache
 from .pipeline import CancelledError, PipelineListener, TranslationPipeline
@@ -365,6 +365,20 @@ class SettingsDialog(QDialog):
         self.lbl_model_usage = QLabel("")
         self.lbl_model_usage.setWordWrap(True)
         form_model.addRow("Speicherstatus:", self.lbl_model_usage)
+
+        self._hw_rec = intelligence.recommend_model_preset()
+        rec_row = QHBoxLayout()
+        self.lbl_hw_recommendation = QLabel(self._hw_rec.reason)
+        self.lbl_hw_recommendation.setObjectName("hintLabel")
+        self.lbl_hw_recommendation.setWordWrap(True)
+        self.btn_apply_recommendation = QPushButton("Empfehlung wählen")
+        self.btn_apply_recommendation.setToolTip("Wählt automatisch das für Ihren Rechner empfohlene Modell-Preset aus")
+        self.btn_apply_recommendation.clicked.connect(
+            lambda: self.cmb_model.setCurrentIndex(self._hw_rec.preset_index)
+        )
+        rec_row.addWidget(self.lbl_hw_recommendation, 1)
+        rec_row.addWidget(self.btn_apply_recommendation, 0, Qt.AlignmentFlag.AlignTop)
+        form_model.addRow("Hardware-Tipp:", rec_row)
 
         model_btn_row = QHBoxLayout()
         self.btn_model_download = QPushButton("Gewähltes Modell laden")
@@ -904,6 +918,27 @@ class MainWindow(QMainWindow):
     def _remove_selected(self) -> None:
         for item in self.list_files.selectedItems():
             self.list_files.takeItem(self.list_files.row(item))
+        self._refresh_queue_summary()
+
+    def _clear_files(self) -> None:
+        self.list_files.clear()
+        self._refresh_queue_summary()
+
+    def _refresh_queue_summary(self) -> None:
+        paths = [Path(self.list_files.item(i).text()) for i in range(self.list_files.count())]
+        if not paths:
+            self.lbl_queue_summary.setText("Noch keine Dokumente in der Warteschlange.")
+            return
+        summary = intelligence.summarize_queue(paths, cache_loader=TranslationCache.load)
+        parts = [
+            f"{summary.file_count} Dokument(e)",
+            f"gesamt {model_manager.format_bytes(summary.total_bytes)}",
+        ]
+        if summary.cached_count:
+            parts.append(f"{summary.cached_count} mit Zwischenspeicher (fortsetzbar)")
+        if summary.missing_count:
+            parts.append(f"{summary.missing_count} Datei(en) nicht gefunden")
+        self.lbl_queue_summary.setText("Warteschlange: " + " · ".join(parts))
 
     def _pick_file(self, edit: QLineEdit, title: str, filt: str) -> None:
         path, _ = QFileDialog.getOpenFileName(self, title, "", filt)

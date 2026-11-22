@@ -26,6 +26,35 @@ ur Abschnitte aufführen, die es wirklich gibt; Features kurz und aus
 Anwendersicht beschreiben (was ändert sich beim Installieren/Nutzen?).
 -->
 
+## v1.3.0 – 2026-11-22
+
+### Neu
+- **Intelligente PDF-Bereinigung (`pdf_reader.py`):** Wiederkehrende Kopf- und Fußzeilen
+  (Kolumnentitel) werden automatisch über die Seiten hinweg erkannt und entfernt;
+  Silbentrennungen am Zeilenende (`transla-\ntion`) werden vor der Übersetzung geheilt.
+- **Automatische Übersetzung von Kapitelüberschriften (`pipeline.py`, `epub_builder.py`):**
+  Erkannte englische Kapitelüberschriften werden gebündelt ins Deutsche übersetzt und
+  erscheinen sowohl im Kapitelkopf als auch im Tolino-Inhaltsverzeichnis (nav + NCX).
+- **Hardware-Empfehlung & Spracherkennung (`intelligence.py`):** Die App erkennt lokal RAM
+  und NVIDIA-GPU, empfiehlt in den Einstellungen (inkl. Direktknopf „Empfehlung wählen“)
+  und im Erststart-Assistenten das passende lokale Sprachmodell und gibt im Protokoll einen
+  Hinweis aus, falls ein Dokument bereits überwiegend auf Deutsch vorliegt.
+- **Warteschlangen-Übersicht im Hauptfenster:** Zeigt beim Hinzufügen von Dokumenten direkt
+  Anzahl, Gesamtgröße und vorhandene fortsetzbare Zwischenspeicher an.
+- **Intelligentes Satzgrenzen-Chunking, Glossar-Filterung & Halluzinationsschutz:**
+  Überlange Einzelabsätze werden sauber an Satzgrenzen geteilt, große Glossare pro Abschnitt
+  auf relevante Begriffe gefiltert und auffällig überlange Antworten automatisch wiederholt.
+
+### Geändert
+- **README.md optimiert:** Klarere Struktur mit Highlights, Modell-Vergleichstabelle,
+  aktueller Projektübersicht und einem neuen Abschnitt mit konkreten Vorschlägen für weitere
+  Features und Optimierungen.
+
+### Behoben
+- **TranslateGemma `max_tokens`-Berechnung (`translator_local.py`):** Strukturierte
+  Listen-Nachrichten von TranslateGemma wurden bisher bei der Zeichenzählung nicht korrekt
+  ausgewertet; die Ausgabelänge wird jetzt zuverlässig aus dem tatsächlichen Text berechnet.
+
 ## v1.2.5 – 2026-11-18
 
 ### Behoben
